@@ -1051,14 +1051,26 @@ function buildMarkersData() {
 }
 
 function applyMarkers() {
-  // City name labels (HTML elements)
+  // City name labels + flight emojis share one HTML elements layer
   const cityData = (showMarkers || userPos) ? buildMarkersData().filter(d => !d.isPin) : [];
+  const combined = [...cityData, ...(showFlights ? _flightData : [])];
   globe
-    .htmlElementsData(cityData)
+    .htmlElementsData(combined)
     .htmlLat(d => d.lat)
     .htmlLng(d => d.lng)
-    .htmlAltitude(d => d.isUserPos ? 0.05 : 0.02)
+    .htmlAltitude(d => d.isUserPos ? 0.05 : d.isFlight ? Math.min(0.04, (d.alt / 12000) * 0.04) : 0.02)
     .htmlElement(d => {
+      if (d.isFlight) {
+        if (!d._el) {
+          const el = document.createElement('div');
+          el.style.cssText = 'font-size:13px;line-height:1;cursor:pointer;user-select:none;';
+          el.textContent = '✈️';
+          el.addEventListener('click', () => openFlightCard(d));
+          d._el = el;
+        }
+        d._el.style.transform = `rotate(${(d.heading || 0) - 45}deg)`;
+        return d._el;
+      }
       if (d.isUserPos) {
         const el = document.createElement('div');
         el.className = 'user-pos-dot';
@@ -1968,26 +1980,10 @@ document.getElementById('btn-night-lights').addEventListener('click', function()
 let showFlights  = false;
 let _flightTimer = null;
 let _flightData  = [];
-
-function altColor(alt) {
-  if (alt < 3000)  return '#44ff88';   // low — green
-  if (alt < 8000)  return '#ffcc44';   // mid — yellow
-  return '#44aaff';                     // high cruise — blue
-}
+let _flightMap   = {};   // callsign → flight object (kept alive between fetches)
 
 function applyFlights() {
-  if (!showFlights) {
-    globe.pointsData([]);
-    return;
-  }
-  globe
-    .pointsData(_flightData)
-    .pointLat(d => d.lat)
-    .pointLng(d => d.lng)
-    .pointAltitude(d => Math.min(0.08, d.alt / 150000))
-    .pointColor(d => altColor(d.alt))
-    .pointRadius(0.2)
-    .onPointClick(d => openFlightCard(d));
+  applyMarkers(); // flights share the html elements layer with city markers
 }
 
 async function fetchFlights() {
@@ -1997,20 +1993,47 @@ async function fetchFlights() {
     const data = await res.json();
     document.getElementById('btn-flights').textContent = '✈️ Flights';
     if (!data.states) return;
-    _flightData = data.states
+
+    const fresh = data.states
       .filter(s => s[5] != null && s[6] != null && !s[8] && (s[7] || 0) > 500)
-      .slice(0, 2000)
-      .map(s => ({
-        icao:     s[0],
-        callsign: (s[1] || '').trim() || s[0].toUpperCase(),
-        country:  s[2] || '—',
-        lng: s[5], lat: s[6],
-        alt:  s[7]  || 0,
-        spd:  s[9]  || 0,
-        heading: s[10] || 0,
-        vrate:   s[11] || 0,
-      }));
-    applyFlights();
+      .slice(0, 2000);
+
+    const seen = new Set();
+    for (const s of fresh) {
+      const key = ((s[1] || '').trim() || s[0].toUpperCase());
+      if (!key) continue;
+      seen.add(key);
+      if (_flightMap[key]) {
+        // Mutate in place — keeps DOM element alive, no flicker on refresh
+        _flightMap[key].lat     = s[6];
+        _flightMap[key].lng     = s[5];
+        _flightMap[key].alt     = s[7] || 0;
+        _flightMap[key].spd     = s[9] || 0;
+        _flightMap[key].heading = s[10] || 0;
+        _flightMap[key].vrate   = s[11] || 0;
+        if (_flightMap[key]._el)
+          _flightMap[key]._el.style.transform = `rotate(${(s[10] || 0) - 45}deg)`;
+      } else {
+        _flightMap[key] = {
+          isFlight: true,
+          icao:     s[0],
+          callsign: key,
+          country:  s[2] || '—',
+          lat:      s[6],
+          lng:      s[5],
+          alt:      s[7] || 0,
+          spd:      s[9] || 0,
+          heading:  s[10] || 0,
+          vrate:    s[11] || 0,
+        };
+      }
+    }
+    // Remove flights that have landed / left view
+    for (const key of Object.keys(_flightMap)) {
+      if (!seen.has(key)) delete _flightMap[key];
+    }
+    _flightData = Object.values(_flightMap);
+    applyMarkers();
   } catch(e) {
     document.getElementById('btn-flights').textContent = '✈️ Flights';
     console.warn('Flights fetch error:', e);
@@ -2044,7 +2067,8 @@ document.getElementById('btn-flights').addEventListener('click', function() {
     _flightTimer = setInterval(fetchFlights, 30000);
   } else {
     clearInterval(_flightTimer); _flightTimer = null;
-    globe.pointsData([]);
+    _flightData = []; _flightMap = {};
+    applyMarkers();
     document.getElementById('flight-card').style.display = 'none';
   }
 });
