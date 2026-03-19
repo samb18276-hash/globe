@@ -877,6 +877,10 @@ applyMarkers();
 globe.onGlobeReady(() => {
   document.getElementById('loading').style.display = 'none';
 });
+// Fallback: hide spinner after 4s no matter what
+setTimeout(() => {
+  document.getElementById('loading').style.display = 'none';
+}, 4000);
 
 // Borders stream in after the globe is visible
 fetch(GEOJSON_URL)
