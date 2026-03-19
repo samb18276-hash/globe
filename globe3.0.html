@@ -898,13 +898,20 @@ function applyBorders(features) {
 }
 
 function applyAllPolygons() {
-  const borders = showBorders ? _borderFeatures : [];
+  if (!_borderFeatures.length) return;
+  const satActive   = document.getElementById('btn-satellite').classList.contains('active');
+  const nightActive = document.getElementById('btn-night-lights').classList.contains('active');
+  const imageMode   = satActive || nightActive; // globe has a real texture
   globe
-    .polygonsData(borders)
+    .polygonsData(_borderFeatures)              // always keep polygons so street fills stay visible
     .polygonAltitude(0.008)
-    .polygonCapColor(f => showBorders ? countryColor(f) : 'rgba(0,0,0,0)')
+    .polygonCapColor(f => imageMode ? 'rgba(0,0,0,0)' : countryColor(f))
     .polygonSideColor(() => 'rgba(255,255,255,0.04)')
-    .polygonStrokeColor(() => 'rgba(255,255,255,0.25)')
+    .polygonStrokeColor(() => {
+      if (!showBorders) return 'rgba(0,0,0,0)';
+      if (nightActive) return 'rgba(255,220,100,0.5)';
+      return satActive ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)';
+    })
     .polygonLabel(null);
 }
 
@@ -1904,14 +1911,7 @@ mapTabs.forEach(tab => {
 document.getElementById('btn-borders').addEventListener('click', function() {
   showBorders = !showBorders;
   this.classList.toggle('active', showBorders);
-  // If turning borders back on while in default (no texture) mode, restore colours
-  const satActive = document.getElementById('btn-satellite').classList.contains('active');
-  const strActive = document.getElementById('btn-streetview').classList.contains('active');
-  if (showBorders && !satActive && !strActive) {
-    globe.polygonCapColor(f => countryColor(f))
-         .polygonStrokeColor(() => 'rgba(255,255,255,0.25)');
-  }
-  applyBorders(_borderFeatures);
+  applyAllPolygons();
 });
 
 document.getElementById('btn-heatmap').addEventListener('click', function() {
@@ -1933,8 +1933,7 @@ document.getElementById('btn-streetview').addEventListener('click', function() {
   const m = globe.scene().children.find(c => c.type === 'Mesh' && c.geometry?.type?.includes('Sphere'));
   if (m) m.material.color.set('#071a40');
   globe.globeImageUrl(STREET_GLOBE_URL);
-  globe.polygonCapColor(f => showBorders ? countryColor(f) : 'rgba(0,0,0,0)')
-       .polygonStrokeColor(() => 'rgba(255,255,255,0.25)');
+  applyAllPolygons();
 });
 
 document.getElementById('btn-satellite').addEventListener('click', function() {
@@ -1944,8 +1943,7 @@ document.getElementById('btn-satellite').addEventListener('click', function() {
   const m = globe.scene().children.find(c => c.type === 'Mesh' && c.geometry?.type?.includes('Sphere'));
   if (m) m.material.color.set('#ffffff');
   globe.globeImageUrl(SAT_GLOBE_URL);
-  globe.polygonCapColor(() => 'rgba(0,0,0,0)')
-       .polygonStrokeColor(() => 'rgba(255,255,255,0.5)');
+  applyAllPolygons();
 });
 
 document.getElementById('btn-night-lights').addEventListener('click', function() {
@@ -1956,18 +1954,13 @@ document.getElementById('btn-night-lights').addEventListener('click', function()
   if (on) {
     if (m) m.material.color.set('#ffffff');
     globe.globeImageUrl(NIGHT_GLOBE_URL);
-    // Borders look great as faint white outlines over night lights
-    globe.polygonCapColor(() => 'rgba(0,0,0,0)')
-         .polygonStrokeColor(() => 'rgba(255,220,100,0.5)');
     globe.atmosphereColor('rgba(30,60,120,0.25)');
   } else {
-    // Back to default dark globe
     if (m) m.material.color.set('#071a40');
     globe.globeImageUrl(STREET_GLOBE_URL);
-    globe.polygonCapColor(f => showBorders ? countryColor(f) : 'rgba(0,0,0,0)')
-         .polygonStrokeColor(() => 'rgba(255,255,255,0.25)');
     globe.atmosphereColor('rgba(30,80,200,0.35)');
   }
+  applyAllPolygons();
 });
 
 
