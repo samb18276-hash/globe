@@ -1995,8 +1995,8 @@ async function fetchFlights() {
     if (!data.states) return;
 
     const fresh = data.states
-      .filter(s => s[5] != null && s[6] != null && !s[8] && (s[7] || 0) > 500)
-      .slice(0, 2000);
+      .filter(s => s[5] != null && s[6] != null && !s[8] && (s[7] || 0) > 3000)
+      .slice(0, 400);
 
     const seen = new Set();
     for (const s of fresh) {
