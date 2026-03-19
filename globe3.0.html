@@ -853,8 +853,11 @@ setTimeout(() => {
 let showBorders  = true;
 let showHeatmap  = true;
 let showMarkers  = true;
+let showFlights  = false;
 let searchPin    = null;
 let userPos      = null;  // { lat, lng } from GPS
+let _flightData  = [];
+let _flightMap   = {};
 
 // ─── Country colour helper ────────────────────────────────────────────────────
 const countryColors = [
@@ -1977,10 +1980,7 @@ document.getElementById('btn-night-lights').addEventListener('click', function()
 
 
 // ─── Live Flights ─────────────────────────────────────────────────────────────
-let showFlights  = false;
 let _flightTimer = null;
-let _flightData  = [];
-let _flightMap   = {};   // callsign → flight object (kept alive between fetches)
 
 function applyFlights() {
   applyMarkers(); // flights share the html elements layer with city markers
