@@ -7,7 +7,12 @@ import discord
 from discord.ext import commands, tasks
 from anthropic import Anthropic
 from dotenv import load_dotenv
-import speech_recognition as sr
+
+# Voice is only available when running locally (too heavy for cloud)
+VOICE_ENABLED = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "my_voice.wav"))
+
+if VOICE_ENABLED:
+    import speech_recognition as sr
 
 load_dotenv()
 
@@ -36,153 +41,133 @@ SYSTEM_PROMPT = """You are sb4, a sharp and helpful assistant focused on helping
 
 You speak casually and directly — no fluff, no filler. You can also chat about anything else the user brings up. Keep responses concise unless the user asks for detail. You're like a smart friend who's good with money and business."""
 
-# Voice state per guild
-guild_state = {}  # guild_id -> {"vc": ..., "sink": ..., "processing": bool}
+# Voice state per guild (local only)
+guild_state = {}
 
-# Lazy-load TTS so startup is fast (first use downloads model ~2GB)
-tts_model = None
+if VOICE_ENABLED:
+    tts_model = None
 
-def get_tts():
-    global tts_model
-    if tts_model is None:
-        from TTS.api import TTS
-        tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
-    return tts_model
+    def get_tts():
+        global tts_model
+        if tts_model is None:
+            from TTS.api import TTS
+            tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+        return tts_model
 
+    class TrackingSink(discord.sinks.WaveSink):
+        def __init__(self):
+            super().__init__()
+            self.last_spoke = {}
 
-class TrackingSink(discord.sinks.WaveSink):
-    def __init__(self):
-        super().__init__()
-        self.last_spoke = {}  # user_id -> timestamp
+        def write(self, data):
+            if data.user:
+                self.last_spoke[data.user.id] = time.monotonic()
+            super().write(data)
 
-    def write(self, data):
-        if data.user:
-            self.last_spoke[data.user.id] = time.monotonic()
-        super().write(data)
-
-
-async def transcribe(wav_bytes: bytes) -> str:
-    recognizer = sr.Recognizer()
-    audio_file = io.BytesIO(wav_bytes)
-    with sr.AudioFile(audio_file) as source:
-        audio = recognizer.record(source)
-    try:
-        return recognizer.recognize_google(audio)
-    except (sr.UnknownValueError, sr.RequestError):
-        return ""
-
-
-async def synthesize(text: str) -> str:
-    """Generate speech in user's cloned voice. Returns path to temp wav file."""
-    ref_wav = os.path.join(os.path.dirname(os.path.abspath(__file__)), "my_voice.wav")
-    out_path = tempfile.mktemp(suffix=".wav")
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, lambda: get_tts().tts_to_file(
-        text=text,
-        speaker_wav=ref_wav,
-        language="en",
-        file_path=out_path
-    ))
-    return out_path
-
-
-async def handle_voice_turn(guild_id: int, user_id: int, wav_bytes: bytes):
-    state = guild_state[guild_id]
-
-    text = await transcribe(wav_bytes)
-    if not text:
-        state["processing"] = False
-        await start_recording(guild_id)
-        return
-
-    if user_id not in conversation_histories:
-        conversation_histories[user_id] = []
-
-    conversation_histories[user_id].append({"role": "user", "content": text})
-    if len(conversation_histories[user_id]) > MAX_HISTORY:
-        conversation_histories[user_id] = conversation_histories[user_id][-MAX_HISTORY:]
-
-    response = client_ai.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=conversation_histories[user_id]
-    )
-    reply = response.content[0].text
-    conversation_histories[user_id].append({"role": "assistant", "content": reply})
-
-    tts_path = await synthesize(reply)
-
-    def after(error):
+    async def transcribe(wav_bytes: bytes) -> str:
+        recognizer = sr.Recognizer()
+        audio_file = io.BytesIO(wav_bytes)
+        with sr.AudioFile(audio_file) as source:
+            audio = recognizer.record(source)
         try:
-            os.unlink(tts_path)
-        except Exception:
-            pass
-        state["processing"] = False
-        asyncio.run_coroutine_threadsafe(start_recording(guild_id), bot.loop)
+            return recognizer.recognize_google(audio)
+        except (sr.UnknownValueError, sr.RequestError):
+            return ""
 
-    vc = state["vc"]
-    if vc.is_connected():
-        vc.play(discord.FFmpegPCMAudio(tts_path), after=after)
+    async def synthesize(text: str) -> str:
+        ref_wav = os.path.join(os.path.dirname(os.path.abspath(__file__)), "my_voice.wav")
+        out_path = tempfile.mktemp(suffix=".wav")
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: get_tts().tts_to_file(
+            text=text,
+            speaker_wav=ref_wav,
+            language="en",
+            file_path=out_path
+        ))
+        return out_path
 
+    async def handle_voice_turn(guild_id: int, user_id: int, wav_bytes: bytes):
+        state = guild_state[guild_id]
+        text = await transcribe(wav_bytes)
+        if not text:
+            state["processing"] = False
+            await start_recording(guild_id)
+            return
+        if user_id not in conversation_histories:
+            conversation_histories[user_id] = []
+        conversation_histories[user_id].append({"role": "user", "content": text})
+        if len(conversation_histories[user_id]) > MAX_HISTORY:
+            conversation_histories[user_id] = conversation_histories[user_id][-MAX_HISTORY:]
+        response = client_ai.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=conversation_histories[user_id]
+        )
+        reply = response.content[0].text
+        conversation_histories[user_id].append({"role": "assistant", "content": reply})
+        tts_path = await synthesize(reply)
+        def after(error):
+            try:
+                os.unlink(tts_path)
+            except Exception:
+                pass
+            state["processing"] = False
+            asyncio.run_coroutine_threadsafe(start_recording(guild_id), bot.loop)
+        vc = state["vc"]
+        if vc.is_connected():
+            vc.play(discord.FFmpegPCMAudio(tts_path), after=after)
 
-async def recording_callback(sink: TrackingSink, guild_id: int):
-    if guild_id not in guild_state:
-        return
-    state = guild_state[guild_id]
+    async def recording_callback(sink: TrackingSink, guild_id: int):
+        if guild_id not in guild_state:
+            return
+        state = guild_state[guild_id]
+        best_user, best_size = None, 0
+        for uid, audio_data in sink.audio_data.items():
+            audio_data.file.seek(0, 2)
+            size = audio_data.file.tell()
+            if size > best_size:
+                best_size = size
+                best_user = uid
+        if best_user and best_size > 10000:
+            sink.audio_data[best_user].file.seek(0)
+            wav_bytes = sink.audio_data[best_user].file.read()
+            asyncio.create_task(handle_voice_turn(guild_id, best_user, wav_bytes))
+        else:
+            state["processing"] = False
+            await start_recording(guild_id)
 
-    # Find user with the most recorded audio
-    best_user = None
-    best_size = 0
-    for uid, audio_data in sink.audio_data.items():
-        audio_data.file.seek(0, 2)
-        size = audio_data.file.tell()
-        if size > best_size:
-            best_size = size
-            best_user = uid
+    async def start_recording(guild_id: int):
+        if guild_id not in guild_state:
+            return
+        state = guild_state[guild_id]
+        vc = state["vc"]
+        if vc.is_connected() and not vc.is_recording() and not state["processing"]:
+            sink = TrackingSink()
+            state["sink"] = sink
+            vc.start_recording(sink, recording_callback, guild_id)
 
-    MIN_BYTES = 10000  # skip very short clips (noise/silence)
-
-    if best_user and best_size > MIN_BYTES:
-        sink.audio_data[best_user].file.seek(0)
-        wav_bytes = sink.audio_data[best_user].file.read()
-        asyncio.create_task(handle_voice_turn(guild_id, best_user, wav_bytes))
-    else:
-        state["processing"] = False
-        await start_recording(guild_id)
-
-
-async def start_recording(guild_id: int):
-    if guild_id not in guild_state:
-        return
-    state = guild_state[guild_id]
-    vc = state["vc"]
-    if vc.is_connected() and not vc.is_recording() and not state["processing"]:
-        sink = TrackingSink()
-        state["sink"] = sink
-        vc.start_recording(sink, recording_callback, guild_id)
-
-
-@tasks.loop(seconds=0.5)
-async def silence_detector():
-    now = time.monotonic()
-    for guild_id, state in list(guild_state.items()):
-        if state["processing"] or not state.get("sink") or not state["vc"].is_connected():
-            continue
-        if not state["vc"].is_recording():
-            continue
-        spoke = state["sink"].last_spoke
-        if not spoke:
-            continue
-        if now - max(spoke.values()) >= SILENCE_THRESHOLD:
-            state["processing"] = True
-            state["vc"].stop_recording()
+    @tasks.loop(seconds=0.5)
+    async def silence_detector():
+        now = time.monotonic()
+        for guild_id, state in list(guild_state.items()):
+            if state["processing"] or not state.get("sink") or not state["vc"].is_connected():
+                continue
+            if not state["vc"].is_recording():
+                continue
+            spoke = state["sink"].last_spoke
+            if not spoke:
+                continue
+            if now - max(spoke.values()) >= SILENCE_THRESHOLD:
+                state["processing"] = True
+                state["vc"].stop_recording()
 
 
 @bot.event
 async def on_ready():
-    silence_detector.start()
-    print(f"sb4 is online as {bot.user}")
+    if VOICE_ENABLED:
+        silence_detector.start()
+    print(f"sb4 is online as {bot.user} | Voice: {'on' if VOICE_ENABLED else 'off (cloud mode)'}")
 
 
 @bot.event
@@ -239,6 +224,9 @@ async def on_message(message):
 
 @bot.command(name="join")
 async def join(ctx):
+    if not VOICE_ENABLED:
+        await ctx.reply("Voice is only available when running locally.")
+        return
     if not ctx.author.voice:
         await ctx.reply("You're not in a voice channel.")
         return
