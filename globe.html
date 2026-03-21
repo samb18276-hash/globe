@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Globe</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: radial-gradient(ellipse at center, #0a0a1a 0%, #000005 100%);
+      font-family: 'Segoe UI', sans-serif;
+      overflow: hidden;
+      color: #fff;
+    }
+
+    /* CSS starfield — no image needed */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.8) 0%, transparent 100%),
+        radial-gradient(1px 1px at 30% 50%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.7) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 80%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 85% 35%, rgba(255,255,255,0.8) 0%, transparent 100%),
+        radial-gradient(1px 1px at 20% 75%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 60%, rgba(255,255,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 45% 90%, rgba(255,255,255,0.7) 0%, transparent 100%),
+        radial-gradient(1px 1px at 90% 10%, rgba(255,255,255,0.9) 0%, transparent 100%),
+        radial-gradient(1px 1px at 5%  55%, rgba(255,255,255,0.5) 0%, transparent 100%);
+    }
+    body::after {
+      background-image:
+        radial-gradient(1px 1px at 15% 40%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 35% 15%, rgba(255,255,255,0.7) 0%, transparent 100%),
+        radial-gradient(1px 1px at 55% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 75% 25%, rgba(255,255,255,0.8) 0%, transparent 100%),
+        radial-gradient(1px 1px at 92% 65%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 95%, rgba(255,255,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 40% 45%, rgba(255,255,255,0.7) 0%, transparent 100%),
+        radial-gradient(1px 1px at 65% 5%,  rgba(255,255,255,0.9) 0%, transparent 100%),
+        radial-gradient(1px 1px at 80% 50%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 8%  85%, rgba(255,255,255,0.6) 0%, transparent 100%);
+    }
+
+    #globe-container {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* ── Search bar ── */
+    #search-panel {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: 8px;
+      width: min(480px, 90vw);
+    }
+
+    #search-input {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(15,15,30,0.85);
+      backdrop-filter: blur(10px);
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #search-input:focus { border-color: #4af; }
+    #search-input::placeholder { color: rgba(255,255,255,0.4); }
+
+    #search-btn {
+      padding: 10px 20px;
+      border-radius: 24px;
+      border: none;
+      background: #1a6fcc;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #search-btn:hover { background: #2288ff; }
+
+    /* ── Search result card ── */
+    #result-card {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      width: min(480px, 90vw);
+      background: rgba(10,15,35,0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(80,160,255,0.3);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: none;
+    }
+    #result-card h3 { font-size: 15px; color: #4af; margin-bottom: 4px; }
+    #result-card p  { font-size: 12px; color: rgba(255,255,255,0.65); line-height: 1.5; }
+
+    /* ── Layer toggles ── */
+    #controls {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toggle-btn {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(15,15,30,0.8);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+    }
+    .toggle-btn.active  { background: rgba(30,80,180,0.7); border-color: #4af; }
+    .toggle-btn:hover   { border-color: rgba(255,255,255,0.5); }
+
+    /* ── Loading overlay ── */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      font-size: 16px;
+      color: rgba(255,255,255,0.6);
+      flex-direction: column;
+      gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #4af;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Info bar ── */
+    #info {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+      line-height: 1.6;
+    }
+
+    /* ── Pin labels ── */
+    .pin-label {
+      background: rgba(10,15,40,0.9);
+      border: 1px solid #4af;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #fff;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 0 12px rgba(68,170,255,0.4);
+    }
+    .pin-label strong { color: #4af; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <span>Loading globe data…</span>
+</div>
+
+<div id="globe-container"></div>
+
+<!-- Search -->
+<div id="search-panel">
+  <input id="search-input" type="text" placeholder="Search any place on Earth…" />
+  <button id="search-btn">Search</button>
+</div>
+
+<div id="result-card">
+  <h3 id="result-name"></h3>
+  <p id="result-info"></p>
+</div>
+
+<!-- Layer controls -->
+<div id="controls">
+  <button class="toggle-btn active" id="btn-borders">🌐 Country Borders</button>
+  <button class="toggle-btn active" id="btn-heatmap">🔥 Heatmap</button>
+  <button class="toggle-btn active" id="btn-markers">📍 City Markers</button>
+</div>
+
+<div id="info">
+  Globe.gl · OpenStreetMap Nominatim<br>
+  Drag to rotate · Scroll to zoom
+</div>
+
+<!-- Globe.gl -->
+<script src="./globe.gl.min.js"></script>
+
+<script>
+// ─── Config ──────────────────────────────────────────────────────────────────
+const GEOJSON_URL = 'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson';
+
+// Major world cities for markers + heatmap seed
+const CITIES = [
+  { name:'New York',     lat:40.71,  lng:-74.01, pop:8.3  },
+  { name:'Los Angeles',  lat:34.05,  lng:-118.24,pop:4.0  },
+  { name:'Chicago',      lat:41.88,  lng:-87.63, pop:2.7  },
+  { name:'London',       lat:51.51,  lng:-0.13,  pop:9.0  },
+  { name:'Paris',        lat:48.86,  lng:2.35,   pop:2.2  },
+  { name:'Berlin',       lat:52.52,  lng:13.41,  pop:3.7  },
+  { name:'Tokyo',        lat:35.69,  lng:139.69, pop:13.9 },
+  { name:'Beijing',      lat:39.91,  lng:116.39, pop:21.5 },
+  { name:'Shanghai',     lat:31.23,  lng:121.47, pop:24.1 },
+  { name:'Mumbai',       lat:19.08,  lng:72.88,  pop:20.7 },
+  { name:'Delhi',        lat:28.61,  lng:77.21,  pop:32.9 },
+  { name:'São Paulo',    lat:-23.55, lng:-46.63, pop:22.0 },
+  { name:'Mexico City',  lat:19.43,  lng:-99.13, pop:21.6 },
+  { name:'Cairo',        lat:30.04,  lng:31.24,  pop:20.9 },
+  { name:'Lagos',        lat:6.52,   lng:3.38,   pop:15.0 },
+  { name:'Nairobi',      lat:-1.29,  lng:36.82,  pop:4.4  },
+  { name:'Sydney',       lat:-33.87, lng:151.21, pop:5.3  },
+  { name:'Moscow',       lat:55.75,  lng:37.62,  pop:12.5 },
+  { name:'Istanbul',     lat:41.01,  lng:28.95,  pop:15.5 },
+  { name:'Dubai',        lat:25.20,  lng:55.27,  pop:3.5  },
+  { name:'Singapore',    lat:1.35,   lng:103.82, pop:5.9  },
+  { name:'Seoul',        lat:37.57,  lng:126.98, pop:9.8  },
+  { name:'Jakarta',      lat:-6.21,  lng:106.85, pop:10.6 },
+  { name:'Buenos Aires', lat:-34.60, lng:-58.38, pop:15.4 },
+  { name:'Karachi',      lat:24.86,  lng:67.01,  pop:16.1 },
+  { name:'Dhaka',        lat:23.81,  lng:90.41,  pop:22.5 },
+  { name:'Kinshasa',     lat:-4.32,  lng:15.32,  pop:17.1 },
+  { name:'Johannesburg', lat:-26.20, lng:28.04,  pop:5.6  },
+  { name:'Toronto',      lat:43.65,  lng:-79.38, pop:6.2  },
+  { name:'Madrid',       lat:40.42,  lng:-3.70,  pop:3.3  },
+];
+
+// ─── Globe init ───────────────────────────────────────────────────────────────
+const globe = Globe()(document.getElementById('globe-container'))
+  .globeImageUrl('')
+  .backgroundColor('rgba(0,0,0,0)')
+  .showAtmosphere(true)
+  .atmosphereColor('#2255cc')
+  .atmosphereAltitude(0.22)
+  .width(window.innerWidth)
+  .height(window.innerHeight);
+
+// resize
+window.addEventListener('resize', () => {
+  globe.width(window.innerWidth).height(window.innerHeight);
+});
+
+// Style the ocean (globe surface) via Three.js material
+globe.onGlobeReady(() => {
+  const globeMesh = globe.scene().children.find(c => c.type === 'Mesh' && c.geometry?.type?.includes('Sphere'));
+  if (globeMesh) globeMesh.material.color.set('#071a40');
+});
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let showBorders  = true;
+let showHeatmap  = true;
+let showMarkers  = true;
+let searchPin    = null;   // {lat, lng, name, info} or null
+
+// ─── Country colour helper ────────────────────────────────────────────────────
+const countryColors = [
+  'rgba(30,80,200,0.55)',  'rgba(20,160,100,0.55)',
+  'rgba(180,40,80,0.55)', 'rgba(160,120,10,0.55)',
+  'rgba(100,30,180,0.55)','rgba(20,140,180,0.55)',
+];
+function countryColor(feat) {
+  const h = feat.properties.name
+    ? feat.properties.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0)
+    : 0;
+  return countryColors[h % countryColors.length];
+}
+
+// ─── Show globe immediately, load borders in background ───────────────────────
+applyHeatmap();
+applyMarkers();
+
+// Dismiss loading as soon as the globe texture is ready
+globe.onGlobeReady(() => {
+  document.getElementById('loading').style.display = 'none';
+});
+
+// Borders stream in after the globe is visible
+fetch(GEOJSON_URL)
+  .then(r => r.json())
+  .then(world => {
+    _borderFeatures = world.features;
+    if (showBorders) applyBorders(_borderFeatures);
+  })
+  .catch(() => {/* no borders — globe still works */});
+
+// ─── Layer: Country Borders ───────────────────────────────────────────────────
+function applyBorders(features) {
+  if (!showBorders) { globe.polygonsData([]); return; }
+  globe
+    .polygonsData(features)
+    .polygonAltitude(0.008)
+    .polygonCapColor(f => showBorders ? countryColor(f) : 'rgba(0,0,0,0)')
+    .polygonSideColor(() => 'rgba(255,255,255,0.04)')
+    .polygonStrokeColor(() => 'rgba(255,255,255,0.25)')
+    .polygonLabel(f =>
+      `<div style="background:rgba(0,0,20,.85);padding:6px 10px;border-radius:8px;
+       border:1px solid rgba(80,160,255,.4);font-size:13px;color:#fff">
+         <b>${f.properties.name || 'Unknown'}</b>
+       </div>`
+    );
+}
+
+let _borderFeatures = [];
+
+// ─── Layer: Heatmap ───────────────────────────────────────────────────────────
+// Build a dense heatmap by spreading random points around each city weighted by pop
+function buildHeatPoints() {
+  const pts = [];
+  CITIES.forEach(c => {
+    const count = Math.round(c.pop * 12);
+    for (let i = 0; i < count; i++) {
+      pts.push({
+        lat: c.lat + (Math.random() - 0.5) * 3.5,
+        lng: c.lng + (Math.random() - 0.5) * 3.5,
+        weight: c.pop,
+      });
+    }
+  });
+  return pts;
+}
+
+function applyHeatmap() {
+  if (!showHeatmap) { globe.heatmapsData([]); return; }
+  const pts = buildHeatPoints();
+  globe
+    .heatmapsData([{ heatmapPoints: pts.map(p => [p.lat, p.lng, p.weight]) }])
+    .heatmapPointLat(d => d[0])
+    .heatmapPointLng(d => d[1])
+    .heatmapPointWeight(d => d[2])
+    .heatmapBandwidth(3.5)
+    .heatmapColorFn(t => {
+      // black → blue → cyan → yellow → red
+      if (t < 0.25) return `rgba(0,50,${Math.round(t*4*255)},${t*4*0.9})`;
+      if (t < 0.5)  return `rgba(0,${Math.round((t-0.25)*4*200)},255,0.85)`;
+      if (t < 0.75) return `rgba(${Math.round((t-0.5)*4*255)},255,255,0.9)`;
+      return `rgba(255,${Math.round((1-t)*4*200)},0,0.95)`;
+    })
+    .heatmapBaseAltitude(0.002)
+    .heatmapTopAltitude(0.06);
+}
+
+// ─── Layer: City Markers ──────────────────────────────────────────────────────
+function buildMarkersData() {
+  const data = [...CITIES];
+  if (searchPin) data.push({ ...searchPin, isPin: true });
+  return data;
+}
+
+function applyMarkers() {
+  if (!showMarkers && !searchPin) { globe.htmlElementsData([]); return; }
+
+  const data = buildMarkersData();
+
+  globe
+    .htmlElementsData(data)
+    .htmlLat(d => d.lat)
+    .htmlLng(d => d.lng)
+    .htmlAltitude(d => d.isPin ? 0.08 : 0.02)
+    .htmlElement(d => {
+      const el = document.createElement('div');
+      el.className = 'pin-label';
+      if (d.isPin) {
+        el.innerHTML = `<strong>📍 ${d.name}</strong>`;
+        el.style.fontSize = '13px';
+        el.style.borderColor = '#ff4';
+        el.style.boxShadow = '0 0 16px rgba(255,220,0,0.6)';
+      } else if (showMarkers) {
+        el.innerHTML = `<strong>${d.name}</strong>`;
+      } else {
+        return null;
+      }
+      return el;
+    });
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+const searchInput = document.getElementById('search-input');
+const searchBtn   = document.getElementById('search-btn');
+const resultCard  = document.getElementById('result-card');
+const resultName  = document.getElementById('result-name');
+const resultInfo  = document.getElementById('result-info');
+
+function parseCoords(q) {
+  const m = q.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+async function resolveLocation(q) {
+  const coords = parseCoords(q);
+  if (coords) {
+    // Coordinates pasted — use ArcGIS reverse geocoder
+    try {
+      const url = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?location=${coords.lng},${coords.lat}&f=json&distance=50&langCode=EN`;
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (data.address?.Match_addr) {
+        const a = data.address;
+        return { lat: coords.lat, lng: coords.lng, name: a.Match_addr, full: a.Match_addr, type: '' };
+      }
+    } catch(_) {}
+    return { lat: coords.lat, lng: coords.lng, name: `${coords.lat}, ${coords.lng}`, full: '', type: '' };
+  }
+
+  // Regular search — Nominatim
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1`;
+  const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  const data = await res.json();
+  if (!data.length) return null;
+  const place = data[0];
+  return {
+    lat:  parseFloat(place.lat),
+    lng:  parseFloat(place.lon),
+    name: place.display_name.split(',').slice(0,2).join(',').trim(),
+    full: place.display_name,
+    type: place.type ? `Type: ${place.type}` : '',
+  };
+}
+
+async function doSearch() {
+  const q = searchInput.value.trim();
+  if (!q) return;
+
+  searchBtn.textContent = '…';
+  searchBtn.disabled = true;
+
+  try {
+    const result = await resolveLocation(q);
+
+    if (!result) {
+      resultName.textContent = 'No results found';
+      resultInfo.textContent = `Could not find "${q}" — try a city, country, or landmark.`;
+      resultCard.style.display = 'block';
+      return;
+    }
+
+    const { lat, lng, name, full, type } = result;
+
+    // Show card
+    resultName.textContent = name;
+    resultInfo.innerHTML   =
+      `${full}<br><span style="color:#4af">${type}</span><br>
+       Lat: ${lat.toFixed(4)} · Lng: ${lng.toFixed(4)}`;
+    resultCard.style.display = 'block';
+
+    // Drop a pin + fly to location
+    searchPin = { lat, lng, name };
+    applyMarkers();
+
+    globe.pointOfView({ lat, lng, altitude: 1.2 }, 1800);
+
+  } catch (err) {
+    resultName.textContent = 'Search error';
+    resultInfo.textContent = 'Could not reach geocoding service. Check your connection.';
+    resultCard.style.display = 'block';
+  } finally {
+    searchBtn.textContent = 'Search';
+    searchBtn.disabled = false;
+  }
+}
+
+searchBtn.addEventListener('click', doSearch);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+// Hide card on globe click
+globe.onGlobeClick(() => { resultCard.style.display = 'none'; });
+
+// ─── Toggle buttons ───────────────────────────────────────────────────────────
+document.getElementById('btn-borders').addEventListener('click', function() {
+  showBorders = !showBorders;
+  this.classList.toggle('active', showBorders);
+  applyBorders(_borderFeatures);
+});
+
+document.getElementById('btn-heatmap').addEventListener('click', function() {
+  showHeatmap = !showHeatmap;
+  this.classList.toggle('active', showHeatmap);
+  applyHeatmap();
+});
+
+document.getElementById('btn-markers').addEventListener('click', function() {
+  showMarkers = !showMarkers;
+  this.classList.toggle('active', showMarkers);
+  applyMarkers();
+});
+
+</script>
+</body>
+</html>

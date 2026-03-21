@@ -1,0 +1,2076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Android Emulator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* ── Phone shell ── */
+    .phone {
+      width: 360px;
+      height: 780px;
+      background: #111;
+      border-radius: 48px;
+      box-shadow: 0 0 0 2px #333, 0 0 0 4px #222, 0 30px 80px rgba(0,0,0,.8);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      user-select: none;
+    }
+    .phone::before {
+      content: '';
+      position: absolute;
+      right: -4px;
+      top: 140px;
+      width: 4px;
+      height: 60px;
+      background: #333;
+      border-radius: 0 4px 4px 0;
+      box-shadow: 0 80px 0 #333;
+    }
+    .phone::after {
+      content: '';
+      position: absolute;
+      left: -4px;
+      top: 120px;
+      width: 4px;
+      height: 40px;
+      background: #333;
+      border-radius: 4px 0 0 4px;
+      box-shadow: 0 55px 0 #333, 0 100px 0 #333;
+    }
+
+    /* ── Notch ── */
+    .notch-bar {
+      width: 100%;
+      height: 36px;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .notch {
+      width: 110px;
+      height: 22px;
+      background: #000;
+      border-radius: 0 0 14px 14px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+    .camera { width: 10px; height: 10px; background: #1c1c1c; border-radius: 50%; border: 2px solid #2a2a2a; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      height: 28px;
+      background: rgba(0,0,0,.6);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      font-size: 12px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .status-right { display: flex; gap: 6px; align-items: center; }
+    .battery {
+      width: 22px; height: 12px;
+      border: 1.5px solid #fff;
+      border-radius: 3px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding: 1px;
+    }
+    .battery::after {
+      content: '';
+      position: absolute;
+      right: -5px;
+      width: 3px;
+      height: 6px;
+      background: #fff;
+      border-radius: 0 2px 2px 0;
+    }
+    .battery-fill { height: 100%; width: 70%; background: #4caf50; border-radius: 2px; }
+
+    /* ── Screen ── */
+    .screen {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .wallpaper {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      z-index: 0;
+    }
+    .wallpaper-shapes { position: absolute; inset: 0; overflow: hidden; }
+    .shape { position: absolute; border-radius: 50%; opacity: 0.15; }
+    .shape1 { width: 200px; height: 200px; background: #7c4dff; top: -60px; right: -60px; }
+    .shape2 { width: 150px; height: 150px; background: #00bcd4; bottom: 80px; left: -40px; }
+    .shape3 { width: 100px; height: 100px; background: #e91e63; top: 180px; left: 20px; }
+
+    /* ── Home content ── */
+    .home-content {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+    }
+    .clock-widget { text-align: center; margin: 20px 0 30px; }
+    .clock-time { font-size: 56px; font-weight: 200; color: #fff; letter-spacing: -2px; text-shadow: 0 2px 12px rgba(0,0,0,.4); }
+    .clock-date { font-size: 14px; color: rgba(255,255,255,.75); margin-top: 4px; }
+
+    /* ── App grid ── */
+    .app-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 8px; padding: 0 4px; }
+    .app { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+    .app:active .app-icon { transform: scale(0.9); }
+    .app-icon {
+      width: 54px; height: 54px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; transition: transform .1s;
+      box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    }
+    .app-label { font-size: 11px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); text-align: center; white-space: nowrap; overflow: hidden; max-width: 60px; text-overflow: ellipsis; }
+
+    .phone-icon   { background: linear-gradient(135deg, #43a047, #1b5e20); }
+    .msg-icon     { background: linear-gradient(135deg, #42a5f5, #1565c0); }
+    .chrome-icon  { background: linear-gradient(135deg, #ef5350, #b71c1c); }
+    .maps-icon    { background: linear-gradient(135deg, #66bb6a, #2e7d32); }
+    .camera-icon  { background: linear-gradient(135deg, #78909c, #263238); }
+    .gallery-icon { background: linear-gradient(135deg, #ab47bc, #6a1b9a); }
+    .music-icon   { background: linear-gradient(135deg, #ff7043, #bf360c); }
+    .settings-icon{ background: linear-gradient(135deg, #78909c, #37474f); }
+    .yt-icon      { background: linear-gradient(135deg, #ef5350, #c62828); }
+    .mail-icon    { background: linear-gradient(135deg, #29b6f6, #01579b); }
+    .calc-icon    { background: linear-gradient(135deg, #26c6da, #006064); }
+    .clock-icon   { background: linear-gradient(135deg, #ffa726, #e65100); }
+
+    /* ── Dock ── */
+    .dock {
+      position: relative; z-index: 2; margin: 12px 16px;
+      background: rgba(255,255,255,.12); backdrop-filter: blur(16px);
+      border-radius: 24px; padding: 12px;
+      display: flex; justify-content: space-around; align-items: center;
+    }
+    .dock .app-label { display: none; }
+    .dock .app-icon { width: 50px; height: 50px; }
+
+    /* ── Nav bar ── */
+    .nav-bar {
+      height: 48px; background: #000;
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 0 24px; flex-shrink: 0;
+    }
+    .nav-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 8px; transition: background .15s; }
+    .nav-btn:active { background: rgba(255,255,255,.1); }
+    .nav-btn svg { fill: #fff; width: 22px; height: 22px; }
+
+    /* ── Notification ── */
+    .notif {
+      position: absolute; top: 8px; left: 12px; right: 12px;
+      background: rgba(30,30,30,.95); backdrop-filter: blur(12px);
+      border-radius: 14px; padding: 12px 14px;
+      display: flex; gap: 12px; align-items: center;
+      z-index: 10; box-shadow: 0 4px 24px rgba(0,0,0,.5);
+      opacity: 0; transform: translateY(-60px);
+      transition: opacity .3s, transform .4s cubic-bezier(.34,1.56,.64,1);
+    }
+    .notif.show { opacity: 1; transform: translateY(0); }
+    .notif-icon { font-size: 28px; flex-shrink: 0; }
+    .notif-text { flex: 1; }
+    .notif-app { font-size: 11px; color: rgba(255,255,255,.5); margin-bottom: 2px; }
+    .notif-msg { font-size: 13px; color: #fff; }
+    .notif-time { font-size: 11px; color: rgba(255,255,255,.4); }
+
+    /* ── Lock screen ── */
+    .lock-screen {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      z-index: 20; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
+      transition: opacity .4s, transform .4s;
+    }
+    .lock-screen.hidden { opacity: 0; pointer-events: none; transform: translateY(-100%); }
+    .lock-clock { font-size: 64px; font-weight: 200; color: #fff; }
+    .lock-date { font-size: 14px; color: rgba(255,255,255,.7); }
+    .lock-hint { font-size: 13px; color: rgba(255,255,255,.5); margin-top: 40px; }
+    .lock-icon { font-size: 36px; margin-top: 8px; cursor: pointer; }
+    .slide-up { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+    /* ── App Modal ── */
+    .app-modal {
+      position: absolute; inset: 0; z-index: 15;
+      display: flex; flex-direction: column;
+      transform: translateY(100%);
+      transition: transform .35s cubic-bezier(.4,0,.2,1);
+    }
+    .app-modal.open { transform: translateY(0); }
+    .app-modal-header {
+      height: 56px; background: #1a1a1a;
+      display: flex; align-items: center;
+      padding: 0 16px; gap: 12px;
+      color: #fff; font-size: 18px; font-weight: 500; flex-shrink: 0;
+    }
+    .app-modal-back { cursor: pointer; font-size: 22px; }
+    .app-modal-body {
+      flex: 1; overflow: hidden; position: relative;
+      background: #fff; display: flex; flex-direction: column;
+    }
+
+    /* ════════ APP STYLES ════════ */
+
+    /* ── Dialer ── */
+    .dial-display {
+      padding: 12px 20px; font-size: 34px; text-align: right;
+      min-height: 68px; background: #f8f8f8;
+      border-bottom: 1px solid #e0e0e0; letter-spacing: 3px; color: #222;
+      display: flex; align-items: center; justify-content: flex-end;
+      word-break: break-all;
+    }
+    .dial-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      flex: 1; background: #fff;
+    }
+    .dial-key {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border: none; background: #fff; cursor: pointer; padding: 0;
+      border-bottom: 1px solid #f0f0f0; border-right: 1px solid #f0f0f0;
+      font-family: inherit; transition: background .1s; min-height: 58px;
+    }
+    .dial-key:active { background: #ebebeb; }
+    .dial-key-num { font-size: 24px; color: #333; }
+    .dial-key-letters { font-size: 9px; color: #999; height: 12px; }
+    .dial-actions {
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 10px 24px; background: #fff; border-top: 1px solid #e0e0e0; flex-shrink: 0;
+    }
+    .dial-spacer { width: 60px; height: 60px; }
+    .dial-call-btn {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #4caf50; border: none; font-size: 28px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(76,175,80,.45); transition: transform .1s;
+    }
+    .dial-call-btn:active { transform: scale(0.92); }
+    .dial-back-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: #f0f0f0; border: none; font-size: 20px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dial-back-btn:active { background: #e0e0e0; }
+    .call-overlay {
+      position: absolute; inset: 0; background: #0d0d1a;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; color: #fff; z-index: 2;
+    }
+    .call-number { font-size: 28px; letter-spacing: 3px; }
+    .call-status { font-size: 14px; color: rgba(255,255,255,.6); }
+    .call-rings { position: relative; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center; margin: 8px 0; }
+    .call-ring {
+      position: absolute; border: 3px solid rgba(76,175,80,.5); border-radius: 50%;
+      animation: ringPulse 1.8s infinite ease-out;
+    }
+    .call-ring:nth-child(1) { width: 50px; height: 50px; }
+    .call-ring:nth-child(2) { width: 76px; height: 76px; animation-delay: 0.4s; }
+    .call-ring:nth-child(3) { width: 110px; height: 110px; animation-delay: 0.8s; }
+    @keyframes ringPulse { 0%{opacity:.8;transform:scale(.7)} 100%{opacity:0;transform:scale(1)} }
+    .call-center-icon { position: absolute; font-size: 28px; }
+    .hangup-btn {
+      width: 64px; height: 64px; border-radius: 50%; background: #f44336;
+      border: none; font-size: 28px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(244,67,54,.4); margin-top: 16px;
+      transition: transform .1s;
+    }
+    .hangup-btn:active { transform: scale(0.92); }
+
+    /* ── Messages ── */
+    .chat-thread {
+      flex: 1; overflow-y: auto; padding: 12px;
+      display: flex; flex-direction: column; gap: 8px; background: #f0f4f8;
+    }
+    .bubble {
+      max-width: 75%; padding: 9px 13px; border-radius: 18px;
+      font-size: 14px; line-height: 1.4;
+    }
+    .bubble-sent { background: #1565c0; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .bubble-recv { background: #fff; color: #222; align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .bubble-time { font-size: 10px; opacity: .6; margin-top: 3px; display: block; }
+    .chat-input-bar {
+      display: flex; gap: 8px; padding: 10px 12px;
+      background: #fff; border-top: 1px solid #e0e0e0; align-items: center; flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1; padding: 9px 14px; border-radius: 22px; border: 1px solid #ddd;
+      font-size: 14px; font-family: inherit; outline: none;
+    }
+    .chat-send-btn {
+      width: 40px; height: 40px; border-radius: 50%; background: #1565c0;
+      border: none; color: #fff; font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* ── Chrome ── */
+    .browser-bar {
+      display: flex; gap: 4px; padding: 7px 8px;
+      background: #f5f5f5; border-bottom: 1px solid #ddd; align-items: center; flex-shrink: 0;
+    }
+    .browser-nav-btn {
+      width: 30px; height: 30px; border: none; background: transparent;
+      border-radius: 50%; font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; color: #555;
+    }
+    .browser-nav-btn:active { background: #e0e0e0; }
+    .browser-url { flex: 1; padding: 5px 10px; border-radius: 16px; border: 1px solid #ddd; background: #fff; font-size: 12px; font-family: inherit; outline: none; }
+    .browser-go { padding: 5px 10px; background: #1565c0; color: #fff; border: none; border-radius: 14px; font-size: 12px; cursor: pointer; }
+    .browser-frame-wrap { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+    .browser-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+    .browser-error {
+      position: absolute; inset: 0; display: none; flex-direction: column;
+      align-items: center; justify-content: center; background: #fafafa;
+      color: #666; font-size: 14px; gap: 12px; padding: 20px; text-align: center;
+    }
+    .browser-error.show { display: flex; }
+
+    /* ── Gallery ── */
+    .gallery-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 2px; background: #000; overflow-y: auto; flex: 1;
+    }
+    .gallery-thumb { aspect-ratio: 1; object-fit: cover; width: 100%; cursor: pointer; display: block; }
+    .gallery-thumb:active { opacity: .75; }
+    .gallery-lightbox {
+      position: absolute; inset: 0; background: rgba(0,0,0,.95);
+      display: none; align-items: center; justify-content: center;
+      flex-direction: column; z-index: 5;
+    }
+    .gallery-lightbox.open { display: flex; }
+    .gallery-lightbox img { max-width: 100%; max-height: 82%; object-fit: contain; border-radius: 4px; }
+    .gallery-lb-close {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(255,255,255,.2); border: none; color: #fff;
+      font-size: 18px; width: 36px; height: 36px; border-radius: 50%;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── Music ── */
+    .music-wrap {
+      display: flex; flex-direction: column; height: 100%;
+      background: linear-gradient(180deg, #1a1a2e 0%, #302b63 100%); color: #fff;
+    }
+    .music-albumart {
+      width: 130px; height: 130px; border-radius: 16px;
+      margin: 20px auto 12px; display: flex; align-items: center; justify-content: center;
+      font-size: 54px; flex-shrink: 0; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    .music-title { text-align: center; font-size: 17px; font-weight: 600; padding: 0 20px; margin-bottom: 2px; }
+    .music-artist { text-align: center; font-size: 13px; color: rgba(255,255,255,.6); margin-bottom: 12px; }
+    .music-progress-wrap { padding: 0 24px; margin-bottom: 4px; }
+    .music-progress-track { height: 4px; background: rgba(255,255,255,.2); border-radius: 2px; overflow: hidden; }
+    .music-progress-fill { height: 100%; background: #7c4dff; border-radius: 2px; width: 0%; transition: width .3s linear; }
+    .music-times { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,.45); padding: 4px 24px 0; }
+    .music-controls { display: flex; justify-content: center; align-items: center; gap: 24px; padding: 8px 0 12px; }
+    .music-btn { background: none; border: none; color: #fff; font-size: 26px; cursor: pointer; padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .music-btn:active { background: rgba(255,255,255,.15); }
+    .music-play-btn { width: 58px; height: 58px; background: #7c4dff; border-radius: 50%; font-size: 26px; box-shadow: 0 4px 16px rgba(124,77,255,.5); }
+    .music-playlist { flex: 1; overflow-y: auto; border-top: 1px solid rgba(255,255,255,.1); }
+    .music-track-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,.05); transition: background .15s;
+    }
+    .music-track-item:active { background: rgba(255,255,255,.08); }
+    .music-track-item.active-track { background: rgba(124,77,255,.25); }
+    .music-track-num { width: 22px; text-align: center; font-size: 13px; color: rgba(255,255,255,.4); flex-shrink: 0; }
+    .music-track-info { flex: 1; }
+    .music-track-name { font-size: 14px; color: #fff; }
+    .music-track-artist { font-size: 11px; color: rgba(255,255,255,.5); margin-top: 1px; }
+    .music-track-dur { font-size: 12px; color: rgba(255,255,255,.4); }
+
+    /* ── Settings ── */
+    .settings-wrap { overflow-y: auto; flex: 1; background: #f2f2f7; }
+    .settings-section { margin-top: 20px; padding: 0 16px; }
+    .settings-section:last-child { margin-bottom: 20px; }
+    .settings-section-title { font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; padding: 0 4px; }
+    .settings-card { background: #fff; border-radius: 12px; overflow: hidden; }
+    .settings-row {
+      display: flex; align-items: center; padding: 13px 16px;
+      border-bottom: 1px solid #f2f2f7; gap: 12px;
+    }
+    .settings-row:last-child { border-bottom: none; }
+    .settings-row-icon { font-size: 20px; width: 28px; text-align: center; }
+    .settings-row-label { flex: 1; font-size: 15px; color: #222; }
+    .settings-toggle { position: relative; width: 51px; height: 31px; cursor: pointer; flex-shrink: 0; }
+    .settings-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-slider { position: absolute; inset: 0; background: #ccc; border-radius: 31px; transition: background .2s; }
+    .toggle-slider:before {
+      content: ''; position: absolute; width: 27px; height: 27px;
+      left: 2px; top: 2px; background: #fff; border-radius: 50%;
+      transition: transform .2s; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    }
+    .settings-toggle input:checked + .toggle-slider { background: #34c759; }
+    .settings-toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+    .wifi-networks { overflow: hidden; max-height: 0; transition: max-height .3s; background: #f9f9f9; }
+    .wifi-networks.visible { max-height: 200px; }
+    .wifi-net-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px 10px 56px; border-top: 1px solid #f2f2f7; font-size: 14px; color: #333;
+    }
+    .wifi-net-signal { font-size: 12px; color: #999; }
+    .settings-slider-row { padding: 10px 16px; }
+    .settings-slider-label { font-size: 13px; color: #666; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .brightness-slider { width: 100%; accent-color: #007aff; }
+
+    /* ── YouTube ── */
+    .yt-wrap { display: flex; flex-direction: column; height: 100%; background: #f9f9f9; }
+    .yt-search-bar { display: flex; gap: 8px; padding: 10px 12px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; }
+    .yt-search-input { flex: 1; padding: 8px 12px; border-radius: 20px; border: 1px solid #ddd; font-size: 14px; font-family: inherit; outline: none; background: #f5f5f5; }
+    .yt-search-btn { padding: 8px 14px; background: #ff0000; color: #fff; border: none; border-radius: 20px; font-size: 13px; cursor: pointer; }
+    .yt-list { flex: 1; overflow-y: auto; }
+    .yt-video-item { display: flex; gap: 10px; padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background .15s; }
+    .yt-video-item:active { background: #f0f0f0; }
+    .yt-thumb-wrap { width: 120px; height: 68px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: #e0e0e0; position: relative; }
+    .yt-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .yt-thumb-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(0,0,0,.25); }
+    .yt-video-meta { flex: 1; }
+    .yt-video-title { font-size: 13px; color: #222; font-weight: 500; line-height: 1.3; margin-bottom: 4px; }
+    .yt-video-channel { font-size: 12px; color: #666; }
+    .yt-video-views { font-size: 11px; color: #999; margin-top: 2px; }
+    .yt-player-wrap { display: none; flex-direction: column; height: 100%; background: #000; }
+    .yt-player-wrap.active { display: flex; }
+    .yt-player-back { padding: 10px 12px; background: #111; color: #ccc; font-size: 14px; cursor: pointer; border: none; text-align: left; font-family: inherit; flex-shrink: 0; }
+    .yt-player-iframe { width: 100%; height: 190px; border: none; flex-shrink: 0; }
+    .yt-player-info { padding: 12px; background: #111; flex: 1; overflow-y: auto; }
+    .yt-player-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+    .yt-player-channel { font-size: 13px; color: #aaa; }
+
+    /* ── Mail ── */
+    .mail-inbox { display: flex; flex-direction: column; height: 100%; }
+    .mail-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e0e0e0; background: #fff; flex-shrink: 0; }
+    .mail-toolbar-title { font-size: 18px; font-weight: 600; color: #222; }
+    .mail-compose-btn { width: 36px; height: 36px; border-radius: 50%; background: #1565c0; border: none; color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .mail-list { flex: 1; overflow-y: auto; }
+    .mail-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background .15s; }
+    .mail-item:active { background: #f5f5f5; }
+    .mail-item.unread { background: #f0f8ff; }
+    .mail-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; flex-shrink: 0; font-weight: 600; }
+    .mail-item-meta { flex: 1; min-width: 0; }
+    .mail-sender { font-size: 14px; font-weight: 500; color: #222; }
+    .mail-item.unread .mail-sender { font-weight: 700; }
+    .mail-subject { font-size: 13px; color: #444; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mail-preview { font-size: 12px; color: #999; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mail-time { font-size: 11px; color: #999; flex-shrink: 0; }
+
+    .mail-detail { display: none; flex-direction: column; height: 100%; }
+    .mail-detail.active { display: flex; }
+    .mail-detail-back { padding: 10px 16px; background: #f5f5f5; border-bottom: 1px solid #ddd; cursor: pointer; font-size: 14px; color: #1565c0; border: none; text-align: left; font-family: inherit; width: 100%; flex-shrink: 0; }
+    .mail-detail-header { padding: 16px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; }
+    .mail-detail-subject { font-size: 17px; font-weight: 600; color: #222; margin-bottom: 6px; }
+    .mail-detail-meta { font-size: 12px; color: #999; }
+    .mail-detail-body { flex: 1; overflow-y: auto; padding: 16px; font-size: 14px; color: #333; line-height: 1.7; }
+
+    .mail-compose-view { display: none; flex-direction: column; height: 100%; }
+    .mail-compose-view.active { display: flex; }
+    .mail-compose-header { padding: 12px 16px; background: #f5f5f5; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .mail-compose-back { color: #1565c0; font-size: 14px; cursor: pointer; border: none; background: none; font-family: inherit; }
+    .mail-compose-title { font-size: 16px; font-weight: 600; color: #222; }
+    .mail-compose-form { flex: 1; overflow-y: auto; padding: 0 16px; display: flex; flex-direction: column; }
+    .mail-compose-field { display: flex; align-items: center; border-bottom: 1px solid #e0e0e0; padding: 10px 0; gap: 8px; }
+    .mail-compose-label { font-size: 13px; color: #999; width: 50px; flex-shrink: 0; }
+    .mail-compose-input { flex: 1; border: none; font-size: 14px; font-family: inherit; outline: none; background: transparent; }
+    .mail-compose-body { flex: 1; border: none; font-size: 14px; font-family: inherit; outline: none; resize: none; min-height: 120px; background: transparent; padding: 12px 0; }
+    .mail-send-btn { margin: 12px 0 16px; padding: 13px; background: #1565c0; color: #fff; border: none; border-radius: 10px; font-size: 15px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+
+    /* ── Calculator ── */
+    .calc-wrap { display: flex; flex-direction: column; height: 100%; background: #1c1c1e; }
+    .calc-display { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px 20px; min-height: 0; }
+    .calc-expr { font-size: 18px; color: #636366; text-align: right; margin-bottom: 4px; min-height: 24px; word-break: break-all; }
+    .calc-val { font-size: 52px; color: #fff; text-align: right; font-weight: 300; letter-spacing: -1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .calc-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; background: #3a3a3c; flex-shrink: 0; height: 320px;
+    }
+    .calc-btn {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-family: inherit; border: none; cursor: pointer;
+      transition: filter .1s; color: #fff; background: #2c2c2e;
+    }
+    .calc-btn:active { filter: brightness(1.5); }
+    .calc-fn { background: #636366; }
+    .calc-op { background: #ff9f0a; }
+    .calc-zero { grid-column: span 2; justify-content: flex-start; padding-left: 28px; font-size: 22px; }
+
+    /* ── Clock App ── */
+    .clock-app-wrap { display: flex; flex-direction: column; height: 100%; background: #1a1a2e; color: #fff; }
+    .clock-tabs { display: flex; background: #111; border-bottom: 1px solid #333; flex-shrink: 0; }
+    .clock-tab-btn {
+      flex: 1; padding: 12px 0; border: none; background: transparent;
+      color: #888; font-size: 13px; cursor: pointer; font-family: inherit;
+      border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+    }
+    .clock-tab-btn.active { color: #7c4dff; border-bottom-color: #7c4dff; }
+    .clock-tab-panel { flex: 1; display: none; flex-direction: column; align-items: center; overflow-y: auto; }
+    .clock-tab-panel.active { display: flex; }
+
+    /* Stopwatch */
+    .sw-display { font-size: 54px; font-weight: 200; letter-spacing: 2px; padding: 28px 0 8px; font-variant-numeric: tabular-nums; }
+    .sw-cs { font-size: 34px; color: rgba(255,255,255,.55); }
+    .sw-buttons { display: flex; gap: 20px; padding: 12px 24px; }
+    .sw-btn {
+      flex: 1; height: 58px; border-radius: 14px; border: none;
+      font-size: 15px; cursor: pointer; font-family: inherit; font-weight: 600;
+      transition: transform .1s;
+    }
+    .sw-btn:active { transform: scale(0.94); }
+    .sw-btn-start { background: #34c759; color: #fff; }
+    .sw-btn-stop { background: #ff3b30; color: #fff; }
+    .sw-btn-lap { background: #2c2c2e; color: #fff; }
+    .sw-btn-reset { background: #2c2c2e; color: #fff; }
+    .sw-laps { width: 100%; flex: 1; overflow-y: auto; padding: 0 16px; }
+    .sw-lap-item { display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid rgba(255,255,255,.1); font-size: 14px; }
+    .sw-lap-label { color: rgba(255,255,255,.5); }
+
+    /* Timer */
+    .timer-panel { width: 100%; padding: 0 16px; display: flex; flex-direction: column; align-items: center; }
+    .timer-ring-wrap { padding: 16px 0 4px; }
+    .timer-digit-display { font-size: 42px; font-weight: 200; letter-spacing: 6px; text-align: center; padding: 4px 0 12px; font-variant-numeric: tabular-nums; }
+    .timer-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin-bottom: 8px; }
+    .timer-key {
+      height: 46px; border-radius: 12px; border: none;
+      background: rgba(255,255,255,.1); color: #fff; font-size: 20px;
+      cursor: pointer; font-family: inherit; transition: background .1s;
+    }
+    .timer-key:active { background: rgba(255,255,255,.25); }
+    .timer-key-del { background: rgba(255,60,60,.18); color: #ff9f9f; }
+    .timer-buttons { display: flex; gap: 12px; width: 100%; margin-bottom: 12px; }
+    .timer-btn {
+      flex: 1; padding: 13px; border-radius: 14px; border: none;
+      font-size: 15px; font-family: inherit; font-weight: 600; cursor: pointer; transition: transform .1s;
+    }
+    .timer-btn:active { transform: scale(0.96); }
+    .timer-btn-start { background: #34c759; color: #fff; }
+    .timer-btn-pause { background: #ff9f0a; color: #fff; }
+    .timer-btn-reset { background: #2c2c2e; color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="phone">
+  <!-- Notch -->
+  <div class="notch-bar">
+    <div class="notch"><div class="camera"></div></div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span id="statusTime">9:41</span>
+    <div class="status-right">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+        <rect x="1" y="16" width="4" height="7" rx="1"/><rect x="7" y="11" width="4" height="12" rx="1"/>
+        <rect x="13" y="6" width="4" height="17" rx="1"/><rect x="19" y="1" width="4" height="22" rx="1"/>
+      </svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+        <path d="M1.5 8.5C5.5 4.5 10.5 2 12 2s6.5 2.5 10.5 6.5l-2 2C17.2 7.2 14.7 5 12 5S6.8 7.2 3.5 10.5l-2-2z"/>
+        <path d="M5.5 12.5C7.8 10.2 9.8 9 12 9s4.2 1.2 6.5 3.5l-2 2C14.9 12.9 13.5 12 12 12s-2.9.9-4.5 2.5l-2-2z"/>
+        <circle cx="12" cy="19" r="2"/>
+      </svg>
+      <div class="battery"><div class="battery-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- Screen -->
+  <div class="screen" id="screen">
+    <div class="wallpaper">
+      <div class="wallpaper-shapes">
+        <div class="shape shape1"></div>
+        <div class="shape shape2"></div>
+        <div class="shape shape3"></div>
+      </div>
+    </div>
+
+    <!-- Notification -->
+    <div class="notif" id="notif">
+      <div class="notif-icon">💬</div>
+      <div class="notif-text">
+        <div class="notif-app">Messages</div>
+        <div class="notif-msg">Hey! Tap an app to open it.</div>
+      </div>
+      <div class="notif-time">now</div>
+    </div>
+
+    <!-- Home screen -->
+    <div class="home-content">
+      <div class="clock-widget">
+        <div class="clock-time" id="clockTime">9:41</div>
+        <div class="clock-date" id="clockDate">Tuesday, March 4</div>
+      </div>
+      <div class="app-grid">
+        <div class="app" onclick="openApp('Phone')"><div class="app-icon phone-icon">📞</div><span class="app-label">Phone</span></div>
+        <div class="app" onclick="openApp('Messages')"><div class="app-icon msg-icon">💬</div><span class="app-label">Messages</span></div>
+        <div class="app" onclick="openApp('Chrome')"><div class="app-icon chrome-icon">🌐</div><span class="app-label">Chrome</span></div>
+        <div class="app" onclick="openApp('Maps')"><div class="app-icon maps-icon">🗺️</div><span class="app-label">Maps</span></div>
+        <div class="app" onclick="openApp('Camera')"><div class="app-icon camera-icon">📷</div><span class="app-label">Camera</span></div>
+        <div class="app" onclick="openApp('Gallery')"><div class="app-icon gallery-icon">🖼️</div><span class="app-label">Gallery</span></div>
+        <div class="app" onclick="openApp('Music')"><div class="app-icon music-icon">🎵</div><span class="app-label">Music</span></div>
+        <div class="app" onclick="openApp('Settings')"><div class="app-icon settings-icon">⚙️</div><span class="app-label">Settings</span></div>
+        <div class="app" onclick="openApp('YouTube')"><div class="app-icon yt-icon">▶️</div><span class="app-label">YouTube</span></div>
+        <div class="app" onclick="openApp('Mail')"><div class="app-icon mail-icon">📧</div><span class="app-label">Mail</span></div>
+        <div class="app" onclick="openApp('Calculator')"><div class="app-icon calc-icon">🔢</div><span class="app-label">Calculator</span></div>
+        <div class="app" onclick="openApp('Clock')"><div class="app-icon clock-icon">⏰</div><span class="app-label">Clock</span></div>
+      </div>
+    </div>
+
+    <!-- Dock -->
+    <div class="dock">
+      <div class="app" onclick="openApp('Phone')"><div class="app-icon phone-icon">📞</div></div>
+      <div class="app" onclick="openApp('Messages')"><div class="app-icon msg-icon">💬</div></div>
+      <div class="app" onclick="openApp('Chrome')"><div class="app-icon chrome-icon">🌐</div></div>
+      <div class="app" onclick="openApp('Camera')"><div class="app-icon camera-icon">📷</div></div>
+    </div>
+
+    <!-- Lock screen -->
+    <div class="lock-screen" id="lockScreen">
+      <div class="lock-clock" id="lockClock">9:41</div>
+      <div class="lock-date" id="lockDate">Tuesday, March 4</div>
+      <div class="lock-hint">Swipe up to unlock</div>
+      <div class="lock-icon slide-up" onclick="unlock()">🔒</div>
+    </div>
+  </div>
+
+  <!-- Nav bar -->
+  <div class="nav-bar">
+    <div class="nav-btn" onclick="goBack()">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </div>
+    <div class="nav-btn" onclick="goHome()">
+      <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+    </div>
+    <div class="nav-btn" onclick="showNotif('Recent apps not available in demo')">
+      <svg viewBox="0 0 24 24"><path d="M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2z"/></svg>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════
+   CORE: CLOCK / UNLOCK / NOTIFICATION
+════════════════════════════════════ */
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2,'0');
+  const m = now.getMinutes().toString().padStart(2,'0');
+  const timeStr = h + ':' + m;
+  const dateStr = now.toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric'});
+  document.getElementById('clockTime').textContent = timeStr;
+  document.getElementById('statusTime').textContent = timeStr;
+  document.getElementById('lockClock').textContent = timeStr;
+  document.getElementById('clockDate').textContent = dateStr;
+  document.getElementById('lockDate').textContent = dateStr;
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+let locked = true;
+function unlock() {
+  document.getElementById('lockScreen').classList.add('hidden');
+  locked = false;
+  setTimeout(function(){ showNotif('Welcome! Tap any app icon.'); }, 600);
+}
+
+let notifTimer;
+function showNotif(msg) {
+  const n = document.getElementById('notif');
+  n.querySelector('.notif-msg').textContent = msg;
+  n.querySelector('.notif-time').textContent = 'now';
+  clearTimeout(notifTimer);
+  n.classList.add('show');
+  notifTimer = setTimeout(function(){ n.classList.remove('show'); }, 3000);
+}
+
+const appIcons = {
+  Phone:'📞', Messages:'💬', Chrome:'🌐', Maps:'🗺️',
+  Camera:'📷', Gallery:'🖼️', Music:'🎵', Settings:'⚙️',
+  YouTube:'▶️', Mail:'📧', Calculator:'🔢', Clock:'⏰'
+};
+
+/* ════════════════════════════════════
+   APP STATE
+════════════════════════════════════ */
+// Calculator
+var _calc = {display:'0', expr:'', first:null, op:null, waitNext:false, hasResult:false};
+
+// Stopwatch
+var _swRunning = false, _swElapsed = 0, _swLastStart = 0, _swInterval = null, _swLaps = [];
+
+// Timer
+var _timer = {running:false, remaining:0, total:0, digits:'', interval:null};
+
+// Music
+var _musicTracks = [
+  {title:'Blinding Lights', artist:'The Weeknd',   dur:'3:20', secs:200, emoji:'🌃', color:'#c62828'},
+  {title:'Shape of You',    artist:'Ed Sheeran',   dur:'3:54', secs:234, emoji:'🎸', color:'#1565c0'},
+  {title:'Levitating',      artist:'Dua Lipa',     dur:'3:23', secs:203, emoji:'🚀', color:'#6a1b9a'},
+  {title:'Stay',            artist:'The Kid LAROI',dur:'2:21', secs:141, emoji:'🎵', color:'#e65100'},
+  {title:'Bad Guy',         artist:'Billie Eilish',dur:'3:14', secs:194, emoji:'😈', color:'#1b5e20'}
+];
+var _music = {track:0, playing:false, progress:0, interval:null};
+
+// Camera
+var _cameraStream = null;
+
+// Clock face
+var _clockFaceInterval = null;
+
+/* ════════════════════════════════════
+   MODAL MANAGEMENT
+════════════════════════════════════ */
+var currentModal = null;
+
+function openApp(name) {
+  if (locked) return;
+  closeModal();
+  var modal = document.createElement('div');
+  modal.className = 'app-modal';
+  modal.id = 'appModal';
+  modal.innerHTML =
+    '<div class="app-modal-header">' +
+      '<span class="app-modal-back" onclick="closeModal()">←</span>' +
+      (appIcons[name]||'') + ' ' + name +
+    '</div>' +
+    '<div class="app-modal-body">' + getAppContent(name) + '</div>';
+  document.getElementById('screen').appendChild(modal);
+  requestAnimationFrame(function(){
+    modal.classList.add('open');
+    initApp(name);
+  });
+  currentModal = modal;
+}
+
+function closeModal() {
+  if (!currentModal) return;
+  cleanupApp();
+  currentModal.classList.remove('open');
+  var m = currentModal;
+  setTimeout(function(){ m.remove(); }, 350);
+  currentModal = null;
+}
+
+function cleanupApp() {
+  // Camera
+  if (_cameraStream) { _cameraStream.getTracks().forEach(function(t){t.stop();}); _cameraStream = null; }
+  // Stopwatch
+  if (_swInterval) { clearInterval(_swInterval); _swInterval = null; }
+  // Timer
+  if (_timer.interval) { clearInterval(_timer.interval); _timer.interval = null; }
+  // Music
+  if (_music.interval) { clearInterval(_music.interval); _music.interval = null; }
+  // Clock face
+  if (_clockFaceInterval) { clearInterval(_clockFaceInterval); _clockFaceInterval = null; }
+}
+
+function goHome() { closeModal(); }
+function goBack() { closeModal(); }
+
+// Swipe to unlock
+var touchStartY = 0;
+var ls = document.getElementById('lockScreen');
+ls.addEventListener('touchstart', function(e){ touchStartY = e.touches[0].clientY; });
+ls.addEventListener('touchend', function(e){ if (touchStartY - e.changedTouches[0].clientY > 40) unlock(); });
+ls.addEventListener('click', unlock);
+
+/* ════════════════════════════════════
+   APP CONTENT GENERATORS
+════════════════════════════════════ */
+function getAppContent(name) {
+  switch(name) {
+    case 'Phone':      return getPhoneContent();
+    case 'Messages':   return getMsgContent();
+    case 'Chrome':     return getChromeContent();
+    case 'Maps':       return getMapsContent();
+    case 'Camera':     return getCameraContent();
+    case 'Gallery':    return getGalleryContent();
+    case 'Music':      return getMusicContent();
+    case 'Settings':   return getSettingsContent();
+    case 'YouTube':    return getYouTubeContent();
+    case 'Mail':       return getMailContent();
+    case 'Calculator': return getCalcContent();
+    case 'Clock':      return getClockContent();
+    default: return '<div style="padding:40px;text-align:center;color:#666;">Coming soon</div>';
+  }
+}
+
+function initApp(name) {
+  switch(name) {
+    case 'Music':      initMusicUI(); break;
+    case 'Camera':     initCamera(); break;
+    case 'Clock':      initClockApp(); break;
+    case 'Chrome':     (function(){ var f = document.getElementById('browserFrame'); if(f) f.srcdoc = fakeSiteGoogle(); })(); break;
+  }
+}
+
+/* ════════════════════════════════════
+   1. PHONE / DIALER
+════════════════════════════════════ */
+function getPhoneContent() {
+  var keys = [
+    {num:'1', sub:''},    {num:'2', sub:'ABC'}, {num:'3', sub:'DEF'},
+    {num:'4', sub:'GHI'}, {num:'5', sub:'JKL'}, {num:'6', sub:'MNO'},
+    {num:'7', sub:'PQRS'},{num:'8', sub:'TUV'}, {num:'9', sub:'WXYZ'},
+    {num:'*', sub:''},    {num:'0', sub:'+'},   {num:'#', sub:''}
+  ];
+  var grid = keys.map(function(k){
+    return '<button class="dial-key" onclick="dialKey(\'' + k.num + '\')">' +
+      '<span class="dial-key-num">' + k.num + '</span>' +
+      '<span class="dial-key-letters">' + k.sub + '</span>' +
+    '</button>';
+  }).join('');
+  return '<div style="display:flex;flex-direction:column;height:100%;background:#fff;">' +
+    '<div class="dial-display" id="dialDisplay"><span style="color:#bbb;font-size:16px;">Enter number</span></div>' +
+    '<div class="dial-grid">' + grid + '</div>' +
+    '<div class="dial-actions">' +
+      '<div class="dial-spacer"></div>' +
+      '<button class="dial-call-btn" onclick="dialCall()">📞</button>' +
+      '<button class="dial-back-btn" onclick="dialBackspace()">⌫</button>' +
+    '</div>' +
+    '<div class="call-overlay" id="callOverlay" style="display:none;">' +
+      '<div class="call-number" id="callNumber"></div>' +
+      '<div class="call-status">Calling…</div>' +
+      '<div class="call-rings">' +
+        '<div class="call-ring"></div><div class="call-ring"></div><div class="call-ring"></div>' +
+        '<div class="call-center-icon">📞</div>' +
+      '</div>' +
+      '<button class="hangup-btn" onclick="dialHangup()">📵</button>' +
+    '</div>' +
+  '</div>';
+}
+
+var _dialNum = '';
+function dialKey(k) {
+  _dialNum += k;
+  var d = document.getElementById('dialDisplay');
+  if (d) d.textContent = _dialNum;
+}
+function dialBackspace() {
+  _dialNum = _dialNum.slice(0,-1);
+  var d = document.getElementById('dialDisplay');
+  if (d) { d.textContent = _dialNum || ''; if (!_dialNum) { d.innerHTML = '<span style="color:#bbb;font-size:16px;">Enter number</span>'; } }
+}
+function dialCall() {
+  if (!_dialNum) return;
+  var overlay = document.getElementById('callOverlay');
+  var numEl = document.getElementById('callNumber');
+  if (overlay && numEl) { numEl.textContent = _dialNum; overlay.style.display = 'flex'; }
+}
+function dialHangup() {
+  var overlay = document.getElementById('callOverlay');
+  if (overlay) overlay.style.display = 'none';
+  _dialNum = '';
+  var d = document.getElementById('dialDisplay');
+  if (d) d.innerHTML = '<span style="color:#bbb;font-size:16px;">Enter number</span>';
+}
+
+/* ════════════════════════════════════
+   2. MESSAGES
+════════════════════════════════════ */
+function getMsgContent() {
+  var now = new Date();
+  function t(minsAgo) {
+    var d = new Date(now - minsAgo*60000);
+    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  }
+  var bubbles =
+    '<div class="bubble bubble-recv">Hey! What are you up to? 👋<span class="bubble-time">' + t(42) + '</span></div>' +
+    '<div class="bubble bubble-sent">Just chilling, trying out this awesome emulator 📱<span class="bubble-time">' + t(38) + '</span></div>' +
+    '<div class="bubble bubble-recv">Haha nice! Does it actually work?<span class="bubble-time">' + t(35) + '</span></div>' +
+    '<div class="bubble bubble-sent">Yeah all 12 apps are functional now 🎉<span class="bubble-time">' + t(2) + '</span></div>';
+  return '<div style="display:flex;flex-direction:column;height:100%;">' +
+    '<div class="chat-thread" id="chatThread">' + bubbles + '</div>' +
+    '<div class="chat-input-bar">' +
+      '<input class="chat-input" id="msgInput" placeholder="Message…" onkeydown="if(event.key===\'Enter\')sendMessage()">' +
+      '<button class="chat-send-btn" onclick="sendMessage()">➤</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function sendMessage() {
+  var input = document.getElementById('msgInput');
+  var thread = document.getElementById('chatThread');
+  if (!input || !thread || !input.value.trim()) return;
+  var now = new Date();
+  var t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  var bubble = document.createElement('div');
+  bubble.className = 'bubble bubble-sent';
+  bubble.innerHTML = escHtml(input.value.trim()) + '<span class="bubble-time">' + t + '</span>';
+  thread.appendChild(bubble);
+  thread.scrollTop = thread.scrollHeight;
+  input.value = '';
+  // Auto-reply after 1s
+  setTimeout(function(){
+    var replies = ['👍 Cool!', 'Nice one!', 'Haha 😂', 'For real?', 'Got it!', '🔥🔥🔥'];
+    var r = replies[Math.floor(Math.random()*replies.length)];
+    var rb = document.createElement('div');
+    rb.className = 'bubble bubble-recv';
+    var now2 = new Date();
+    var t2 = now2.getHours().toString().padStart(2,'0') + ':' + now2.getMinutes().toString().padStart(2,'0');
+    rb.innerHTML = r + '<span class="bubble-time">' + t2 + '</span>';
+    thread.appendChild(rb);
+    thread.scrollTop = thread.scrollHeight;
+  }, 1000);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ════════════════════════════════════
+   3. CHROME / BROWSER
+════════════════════════════════════ */
+function getChromeContent() {
+  return '<div style="display:flex;flex-direction:column;height:100%;">' +
+    '<div class="browser-bar">' +
+      '<button class="browser-nav-btn" onclick="browserNav(-1)">◀</button>' +
+      '<button class="browser-nav-btn" onclick="browserNav(1)">▶</button>' +
+      '<input class="browser-url" id="browserUrl" value="google.com" onkeydown="if(event.key===\'Enter\')browserGo()">' +
+      '<button class="browser-go" onclick="browserGo()">Go</button>' +
+    '</div>' +
+    '<div class="browser-frame-wrap">' +
+      '<iframe class="browser-iframe" id="browserFrame" onload="browserFrameLoaded()"></iframe>' +
+    '</div>' +
+  '</div>';
+}
+
+/* map hostname → fake page generator */
+var _fakeSites = {
+  'google.com':    fakeSiteGoogle,
+  'youtube.com':   fakeSiteYouTube,
+  'twitter.com':   fakeSiteTwitter,
+  'x.com':         fakeSiteTwitter,
+  'reddit.com':    fakeSiteReddit,
+  'github.com':    fakeSiteGitHub,
+  'facebook.com':  fakeSiteFacebook,
+  'instagram.com': fakeSiteInstagram,
+};
+
+function browserGo() {
+  var input = document.getElementById('browserUrl');
+  var frame = document.getElementById('browserFrame');
+  if (!input || !frame) return;
+  var raw = input.value.trim();
+  if (!raw) return;
+  if (!raw.match(/^https?:\/\//)) raw = 'https://' + raw;
+  input.value = raw;
+  var host = '';
+  try { host = new URL(raw).hostname.replace(/^www\./,'').toLowerCase(); } catch(e){}
+  if (_fakeSites[host]) {
+    frame.removeAttribute('src');
+    frame.srcdoc = _fakeSites[host]();
+  } else {
+    frame.removeAttribute('srcdoc');
+    frame.src = raw;
+  }
+}
+
+function browserFrameLoaded() {
+  /* srcdoc pages always load fine; for real URLs detect blocked frames */
+  var frame = document.getElementById('browserFrame');
+  if (!frame || frame.hasAttribute('srcdoc')) return;
+  try {
+    /* cross-origin throws → site loaded (good) */
+    var doc = frame.contentDocument;
+    if (!doc || !doc.body || doc.body.innerHTML === '') {
+      frame.srcdoc = fakeSiteBlocked(frame.src || '');
+    }
+  } catch(e) { /* cross-origin = actually loaded */ }
+}
+
+function browserNav(dir) {
+  var frame = document.getElementById('browserFrame');
+  if (!frame || !frame.contentWindow) return;
+  try { if (dir < 0) frame.contentWindow.history.back(); else frame.contentWindow.history.forward(); } catch(e){}
+}
+
+/* ── Fake site generators ── */
+function _fakeBase(head, body) {
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8">' + head + '</head><body>' + body + '</body></html>';
+}
+
+function fakeSiteGoogle() {
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;background:#fff;display:flex;flex-direction:column;align-items:center;padding-top:80px;min-height:100vh;}.logo{font-size:64px;font-weight:700;letter-spacing:-2px;margin-bottom:28px;line-height:1;}.sbox{display:flex;align-items:center;border:1px solid #dfe1e5;border-radius:24px;padding:9px 18px;width:92%;gap:8px;margin-bottom:22px;}.sbox:focus-within{box-shadow:0 1px 6px rgba(32,33,36,.3);border-color:transparent;}input{border:none;outline:none;flex:1;font-size:16px;}.btn{padding:9px 18px;background:#f8f9fa;border:1px solid #f8f9fa;border-radius:4px;cursor:pointer;font-size:14px;color:#3c4043;}.btn:hover{border-color:#dadce0;box-shadow:0 1px 1px rgba(0,0,0,.1);}.footer{position:fixed;bottom:0;left:0;right:0;background:#f2f2f2;padding:12px 20px;font-size:13px;color:#70757a;display:flex;justify-content:space-between;}</style>',
+    '<div class="logo"><span style="color:#4285f4">G</span><span style="color:#ea4335">o</span><span style="color:#fbbc05">o</span><span style="color:#4285f4">g</span><span style="color:#34a853">l</span><span style="color:#ea4335">e</span></div>' +
+    '<div class="sbox"><span style="color:#9aa0a6;font-size:18px;">🔍</span><input type="text" placeholder="Search Google or type a URL"></div>' +
+    '<div style="display:flex;gap:8px;"><button class="btn">Google Search</button><button class="btn">I\'m Feeling Lucky</button></div>' +
+    '<div class="footer"><span>United States</span><span style="display:flex;gap:16px;"><a href="#" style="color:inherit;text-decoration:none;">Privacy</a><a href="#" style="color:inherit;text-decoration:none;">Terms</a><a href="#" style="color:inherit;text-decoration:none;">Settings</a></span></div>'
+  );
+}
+
+function fakeSiteTwitter() {
+  var tweets = [
+    {n:'Elon Musk',   h:'elonmusk',   t:'2m',  v:true,  txt:'Free speech is the bedrock of a functioning democracy. 🦅', l:'48.2K', r:'12.1K'},
+    {n:'NASA',        h:'NASA',        t:'18m', v:true,  txt:'🌌 Hubble captured something extraordinary today. The universe never ceases to amaze us. #Space', l:'92.4K', r:'31.8K'},
+    {n:'Breaking ⚡', h:'breakingnews',t:'1h',  v:true,  txt:'BREAKING: Scientists announce major quantum computing breakthrough that solves problems classical computers couldn\'t crack in 10,000 years.', l:'156K', r:'89.2K'},
+    {n:'Weather Bot', h:'NWSWeather',  t:'3h',  v:false, txt:'⛅ Today: partly cloudy, high 72°F. Perfect weather to go outside. 🌿', l:'4.2K', r:'1.1K'},
+  ];
+  var tw = tweets.map(function(t){
+    return '<div style="padding:14px 16px;border-bottom:1px solid #eff3f4;cursor:pointer;" onmouseover="this.style.background=\'#f7f9f9\'" onmouseout="this.style.background=\'\'">' +
+      '<div style="display:flex;gap:10px;">' +
+        '<div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#1d9bf0,#0d47a1);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;flex-shrink:0;">' + t.n[0] + '</div>' +
+        '<div style="flex:1;">' +
+          '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;flex-wrap:wrap;">' +
+            '<span style="font-weight:700;font-size:15px;">' + t.n + '</span>' +
+            (t.v ? '<span style="color:#1d9bf0;font-size:14px;">✓</span>' : '') +
+            '<span style="color:#536471;font-size:13px;">@' + t.h + ' · ' + t.t + '</span>' +
+          '</div>' +
+          '<div style="font-size:15px;line-height:1.5;margin-bottom:10px;">' + t.txt + '</div>' +
+          '<div style="display:flex;gap:20px;color:#536471;font-size:13px;">' +
+            '<span style="cursor:pointer;">💬 ' + t.r + '</span>' +
+            '<span style="cursor:pointer;">🔁 ' + t.r + '</span>' +
+            '<span style="cursor:pointer;">❤️ ' + t.l + '</span>' +
+            '<span style="cursor:pointer;">📤</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#fff;}</style>',
+    '<div style="background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-bottom:1px solid #eff3f4;padding:12px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;">' +
+      '<div style="font-size:26px;font-weight:900;">𝕏</div>' +
+      '<div style="font-size:18px;font-weight:700;">Home</div>' +
+      '<div style="margin-left:auto;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#1d9bf0,#0d47a1);"></div>' +
+    '</div>' +
+    '<div style="border-bottom:1px solid #eff3f4;padding:12px 16px;display:flex;gap:10px;align-items:center;">' +
+      '<div style="width:42px;height:42px;border-radius:50%;background:#e0e0e0;flex-shrink:0;"></div>' +
+      '<input style="flex:1;border:none;outline:none;font-size:18px;color:#536471;" placeholder="What\'s happening?">' +
+    '</div>' +
+    tw
+  );
+}
+
+function fakeSiteReddit() {
+  var posts = [
+    {sub:'r/programming', votes:'34.2k', title:'I built a full Android emulator in pure HTML/CSS/JS and it actually works', comments:892,  user:'u/webdev_hero',   ago:'5h'},
+    {sub:'r/worldnews',   votes:'28.7k', title:'Scientists discover largest deep-sea creature ever recorded off New Zealand coast', comments:1204, user:'u/ocean_explorer', ago:'8h'},
+    {sub:'r/todayilearned',votes:'45.1k',title:'TIL honey never expires. Archaeologists found 3000-year-old honey in Egyptian tombs that was still edible', comments:2341, user:'u/factmaster',    ago:'12h'},
+    {sub:'r/space',       votes:'62.3k', title:'James Webb captures most detailed image of a star-forming nebula yet [4K image]', comments:3892, user:'u/nasa_fan',      ago:'1d'},
+    {sub:'r/technology',  votes:'18.9k', title:'Why most websites block iframes — and how browsers handle X-Frame-Options', comments:567,  user:'u/securitydev',  ago:'2h'},
+  ];
+  var ph = posts.map(function(p){
+    return '<div style="background:#fff;border:1px solid #ccc;border-radius:4px;margin:8px;padding:10px;display:flex;gap:10px;cursor:pointer;" onmouseover="this.style.borderColor=\'#818384\'" onmouseout="this.style.borderColor=\'#ccc\'">' +
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:36px;flex-shrink:0;">' +
+        '<div style="color:#878a8c;cursor:pointer;font-size:16px;">▲</div>' +
+        '<div style="font-size:11px;font-weight:700;color:#1c1c1c;">' + p.votes + '</div>' +
+        '<div style="color:#878a8c;cursor:pointer;font-size:16px;">▼</div>' +
+      '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:11px;color:#878a8c;margin-bottom:4px;"><b style="color:#1c1c1c;">' + p.sub + '</b> · Posted by ' + p.user + ' ' + p.ago + '</div>' +
+        '<div style="font-size:14px;font-weight:700;color:#222;margin-bottom:6px;">' + p.title + '</div>' +
+        '<div style="font-size:12px;color:#878a8c;">💬 ' + p.comments.toLocaleString() + ' Comments &nbsp; Share &nbsp; Save</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:"IBM Plex Sans",Arial,sans-serif;background:#dae0e6;}</style>',
+    '<div style="background:#fff;border-bottom:1px solid #edeff1;padding:8px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;">' +
+      '<div style="display:flex;align-items:center;gap:6px;">' +
+        '<div style="width:32px;height:32px;background:#ff4500;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;">🤖</div>' +
+        '<span style="font-size:18px;font-weight:700;color:#1c1c1c;">reddit</span>' +
+      '</div>' +
+      '<input style="flex:1;padding:6px 12px;border:1px solid #edeff1;border-radius:20px;background:#f6f7f8;font-size:14px;outline:none;" placeholder="Search Reddit">' +
+      '<button style="padding:6px 16px;background:#ff4500;color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer;flex-shrink:0;">Log In</button>' +
+    '</div>' + ph
+  );
+}
+
+function fakeSiteYouTube() {
+  var vids = [
+    {id:'dQw4w9WgXcQ', t:'Never Gonna Give You Up', c:'Rick Astley',   v:'1.4B views', a:'15 years ago'},
+    {id:'JGwWNGJdvx8', t:'Shape of You',            c:'Ed Sheeran',    v:'6.1B views', a:'7 years ago'},
+    {id:'9bZkp7q19f0', t:'Gangnam Style',            c:'PSY',           v:'5.0B views', a:'12 years ago'},
+    {id:'XqZsoesa55w', t:'Baby Shark Dance',          c:'Pinkfong',      v:'13B views',  a:'7 years ago'},
+  ];
+  var vh = vids.map(function(v){
+    return '<div style="cursor:pointer;" onclick="document.getElementById(\'yt-player\').innerHTML=\'<iframe width=\\"100%\\" height=\\"200\\" src=\\"https://www.youtube.com/embed/' + v.id + '?autoplay=1\\" frameborder=\\"0\\" allow=\\"autoplay\\" allowfullscreen></iframe>\';document.getElementById(\'yt-player\').style.display=\'block\';this.parentNode.style.display=\'none\';">' +
+      '<img src="https://img.youtube.com/vi/' + v.id + '/mqdefault.jpg" style="width:100%;border-radius:8px;display:block;" onerror="this.style.height=\'90px\';this.style.background=\'#e0e0e0\'">' +
+      '<div style="padding:8px 0 12px;">' +
+        '<div style="font-size:14px;font-weight:600;line-height:1.3;margin-bottom:2px;">' + v.t + '</div>' +
+        '<div style="font-size:12px;color:#606060;">' + v.c + '</div>' +
+        '<div style="font-size:12px;color:#606060;">' + v.v + ' · ' + v.a + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Roboto,Arial,sans-serif;background:#fff;}</style>',
+    '<div style="background:#fff;border-bottom:1px solid #e0e0e0;padding:8px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;">' +
+      '<div style="display:flex;align-items:center;gap:4px;"><div style="background:#ff0000;color:#fff;font-size:13px;font-weight:700;padding:3px 8px;border-radius:4px;">▶</div><span style="font-size:16px;font-weight:700;">YouTube</span></div>' +
+      '<input style="flex:1;padding:6px 12px;border:1px solid #ccc;border-radius:20px;font-size:14px;outline:none;" placeholder="Search">' +
+    '</div>' +
+    '<div id="yt-player" style="display:none;background:#000;"></div>' +
+    '<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">' + vh + '</div>'
+  );
+}
+
+function fakeSiteGitHub() {
+  var repos = [
+    {n:'anthropics/claude-code', d:'AI-powered coding assistant for the terminal', lang:'TypeScript', lc:'#2b7489', stars:'24.7k', forks:'1.2k'},
+    {n:'torvalds/linux',         d:'Linux kernel source tree',                       lang:'C',          lc:'#555',    stars:'178k',  forks:'54.2k'},
+    {n:'microsoft/vscode',       d:'Visual Studio Code — Open Source ("Code - OSS")',lang:'TypeScript', lc:'#2b7489', stars:'162k',  forks:'28.5k'},
+    {n:'facebook/react',         d:'The library for web and native user interfaces', lang:'JavaScript', lc:'#f1e05a', stars:'224k',  forks:'45.8k'},
+  ];
+  var rh = repos.map(function(r){
+    return '<div style="border:1px solid #d0d7de;border-radius:6px;padding:16px;cursor:pointer;" onmouseover="this.style.borderColor=\'#0969da\'" onmouseout="this.style.borderColor=\'#d0d7de\'">' +
+      '<div style="color:#0969da;font-weight:600;font-size:15px;margin-bottom:4px;">' + r.n + '</div>' +
+      '<div style="color:#57606a;font-size:13px;margin-bottom:10px;">' + r.d + '</div>' +
+      '<div style="display:flex;gap:14px;color:#57606a;font-size:12px;">' +
+        '<span><span style="width:10px;height:10px;border-radius:50%;background:' + r.lc + ';display:inline-block;margin-right:4px;"></span>' + r.lang + '</span>' +
+        '<span>⭐ ' + r.stars + '</span><span>🍴 ' + r.forks + '</span>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f8fa;font-size:14px;}</style>',
+    '<div style="background:#24292f;padding:12px 16px;display:flex;align-items:center;gap:10px;">' +
+      '<svg height="28" viewBox="0 0 16 16" width="28" fill="#fff"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>' +
+      '<input style="flex:1;padding:6px 12px;border:1px solid #57606a;border-radius:6px;background:#24292f;color:#fff;font-size:14px;outline:none;" placeholder="Search or jump to…">' +
+      '<span style="color:#fff;font-size:13px;cursor:pointer;">Sign in</span>' +
+    '</div>' +
+    '<div style="padding:16px;">' +
+      '<div style="font-size:13px;color:#57606a;font-weight:600;margin-bottom:10px;">Trending repositories</div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;">' + rh + '</div>' +
+    '</div>'
+  );
+}
+
+function fakeSiteFacebook() {
+  var posts = [
+    {n:'Sam Bell',      col:'#1877f2', txt:'Just got my Android emulator working perfectly! All 12 apps functional 🎉', l:47,  t:'2 hours ago'},
+    {n:'Tech Corner',   col:'#42a5f5', txt:'💡 Did you know? The first website ever created is still online at info.cern.ch — it\'s been running since 1991!', l:312, t:'5 hours ago'},
+    {n:'Daily Laughs',  col:'#ff7043', txt:'Me: I\'ll just fix one small bug\n\nAlso me at 3am: *rewrites the entire codebase*\n\n😂 Who can relate?', l:892, t:'Yesterday'},
+  ];
+  var ph = posts.map(function(p){
+    return '<div style="background:#fff;border-radius:10px;border:1px solid #e4e6eb;padding:14px;margin:10px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+        '<div style="width:40px;height:40px;border-radius:50%;background:' + p.col + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;flex-shrink:0;">' + p.n[0] + '</div>' +
+        '<div><div style="font-weight:700;font-size:15px;">' + p.n + '</div><div style="font-size:12px;color:#65676b;">' + p.t + '</div></div>' +
+      '</div>' +
+      '<div style="font-size:15px;line-height:1.5;margin-bottom:12px;white-space:pre-line;">' + p.txt + '</div>' +
+      '<div style="border-top:1px solid #e4e6eb;padding-top:8px;display:flex;gap:4px;">' +
+        '<button style="flex:1;padding:6px;border:none;background:transparent;border-radius:6px;cursor:pointer;font-size:14px;color:#65676b;" onmouseover="this.style.background=\'#f0f2f5\'" onmouseout="this.style.background=\'transparent\'">👍 Like ' + p.l + '</button>' +
+        '<button style="flex:1;padding:6px;border:none;background:transparent;border-radius:6px;cursor:pointer;font-size:14px;color:#65676b;" onmouseover="this.style.background=\'#f0f2f5\'" onmouseout="this.style.background=\'transparent\'">💬 Comment</button>' +
+        '<button style="flex:1;padding:6px;border:none;background:transparent;border-radius:6px;cursor:pointer;font-size:14px;color:#65676b;" onmouseover="this.style.background=\'#f0f2f5\'" onmouseout="this.style.background=\'transparent\'">📤 Share</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f2f5;}</style>',
+    '<div style="background:#1877f2;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;">' +
+      '<span style="color:#fff;font-size:22px;font-weight:900;letter-spacing:-1px;">facebook</span>' +
+      '<input style="flex:1;max-width:160px;margin:0 10px;padding:6px 12px;border:none;border-radius:20px;background:rgba(255,255,255,.2);color:#fff;font-size:14px;outline:none;" placeholder="🔍 Search">' +
+      '<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;">👤</div>' +
+    '</div>' + ph
+  );
+}
+
+function fakeSiteInstagram() {
+  var pics = [1,4,7,10,13,16,2,5,8,11,14,17];
+  var grid = pics.map(function(n){
+    return '<div style="aspect-ratio:1;overflow:hidden;cursor:pointer;position:relative;" onmouseover="this.querySelector(\'.overlay\').style.opacity=\'1\'" onmouseout="this.querySelector(\'.overlay\').style.opacity=\'0\'">' +
+      '<img src="https://picsum.photos/seed/' + n + '/200/200" style="width:100%;height:100%;object-fit:cover;" loading="lazy">' +
+      '<div class="overlay" style="position:absolute;inset:0;background:rgba(0,0,0,.4);opacity:0;transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:14px;color:#fff;font-size:15px;font-weight:700;">❤️ ' + Math.floor(Math.random()*900+100) + '</div>' +
+    '</div>';
+  }).join('');
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#fff;}</style>',
+    '<div style="border-bottom:1px solid #dbdbdb;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:10;">' +
+      '<span style="font-size:22px;font-style:italic;font-weight:700;font-family:Georgia,serif;">Instagram</span>' +
+      '<div style="display:flex;gap:16px;font-size:22px;"><span style="cursor:pointer;">🤍</span><span style="cursor:pointer;">✈️</span></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:12px;padding:12px 16px;overflow-x:auto;border-bottom:1px solid #dbdbdb;">' +
+      [['Sam','#e91e63'],['Alex','#9c27b0'],['Taylor','#ff9800'],['Jordan','#4caf50'],['Morgan','#2196f3']].map(function(s){
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;">' +
+          '<div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(45deg,' + s[1] + ',#ff9800);padding:2px;">' +
+            '<div style="width:100%;height:100%;border-radius:50%;background:#fff;padding:2px;">' +
+              '<div style="width:100%;height:100%;border-radius:50%;background:' + s[1] + ';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">' + s[0][0] + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#262626;">' + s[0] + '</div>' +
+        '</div>';
+      }).join('') +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:#000;padding:2px;">' + grid + '</div>'
+  );
+}
+
+function fakeSiteBlocked(url) {
+  return _fakeBase(
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#fff;color:#333;gap:12px;text-align:center;padding:24px;}</style>',
+    '<div style="font-size:56px;">🚫</div>' +
+    '<div style="font-size:18px;font-weight:600;">This site can\'t be embedded</div>' +
+    '<div style="font-size:13px;color:#888;max-width:280px;line-height:1.6;">' + (url||'This site') + ' uses security headers that block iframes.<br><br>Try: <b>google.com</b>, <b>twitter.com</b>, <b>reddit.com</b>, <b>github.com</b>, <b>youtube.com</b>, <b>facebook.com</b>, <b>instagram.com</b></div>'
+  );
+}
+
+/* ════════════════════════════════════
+   4. MAPS
+════════════════════════════════════ */
+function getMapsContent() {
+  return '<div style="display:flex;flex-direction:column;height:100%;">' +
+    '<div class="browser-bar">' +
+      '<input class="browser-url" id="mapsSearch" value="New York" placeholder="Search location…" onkeydown="if(event.key===\'Enter\')mapsSearch()" style="border-radius:20px;">' +
+      '<button class="browser-go" onclick="mapsSearch()" style="border-radius:20px;">🔍</button>' +
+    '</div>' +
+    '<iframe id="mapsFrame" style="flex:1;border:none;" ' +
+      'src="https://www.openstreetmap.org/export/embed.html?bbox=-74.025%2C40.700%2C-73.910%2C40.800&layer=mapnik&marker=40.7128%2C-74.006">' +
+    '</iframe>' +
+  '</div>';
+}
+
+function mapsSearch() {
+  var input = document.getElementById('mapsSearch');
+  var frame = document.getElementById('mapsFrame');
+  if (!input || !frame) return;
+  var q = input.value.trim();
+  if (!q) return;
+  // Use Nominatim to geocode then update OSM embed
+  var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) + '&format=json&limit=1';
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    if (data && data.length > 0) {
+      var item = data[0];
+      var lat = parseFloat(item.lat), lon = parseFloat(item.lon);
+      var bb = item.boundingbox; // [south, north, west, east]
+      var w = parseFloat(bb[2]), s = parseFloat(bb[0]), e = parseFloat(bb[3]), n = parseFloat(bb[1]);
+      // Expand bbox a bit if too small
+      var dLat = n - s, dLon = e - w;
+      if (dLat < 0.01) { s -= 0.01; n += 0.01; }
+      if (dLon < 0.01) { w -= 0.01; e += 0.01; }
+      frame.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' +
+        w.toFixed(4)+'%2C'+s.toFixed(4)+'%2C'+e.toFixed(4)+'%2C'+n.toFixed(4) +
+        '&layer=mapnik&marker='+lat+'%2C'+lon;
+    }
+  }).catch(function(){});
+}
+
+/* ════════════════════════════════════
+   5. CAMERA
+════════════════════════════════════ */
+function getCameraContent() {
+  return '<div style="display:flex;flex-direction:column;height:100%;background:#000;align-items:center;">' +
+    '<div id="cameraError" style="display:none;color:#fff;text-align:center;padding:40px;flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;">' +
+      '<div style="font-size:48px;">📷</div>' +
+      '<div id="cameraErrMsg" style="font-size:14px;opacity:.8;"></div>' +
+    '</div>' +
+    '<video id="cameraVideo" autoplay playsinline muted style="width:100%;flex:1;object-fit:cover;display:none;"></video>' +
+    '<canvas id="cameraCanvas" style="width:100%;flex:1;object-fit:contain;display:none;"></canvas>' +
+    '<div style="padding:16px 0;display:flex;gap:24px;align-items:center;background:#000;width:100%;justify-content:center;flex-shrink:0;">' +
+      '<button onclick="retakePhoto()" id="retakeBtn" style="display:none;padding:8px 20px;background:#333;color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer;">↺ Retake</button>' +
+      '<button onclick="capturePhoto()" id="captureBtn" style="width:64px;height:64px;border-radius:50%;background:#fff;border:4px solid #888;cursor:pointer;font-size:28px;display:flex;align-items:center;justify-content:center;" title="Capture">⬤</button>' +
+      '<button onclick="savePhoto()" id="saveBtn" style="display:none;padding:8px 20px;background:#4caf50;color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer;">✓ Save</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function initCamera() {
+  var video = document.getElementById('cameraVideo');
+  var errDiv = document.getElementById('cameraError');
+  var errMsg = document.getElementById('cameraErrMsg');
+  if (!video) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showCameraError(errDiv, errMsg, 'Camera API not supported in this browser.');
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false})
+    .then(function(stream){
+      _cameraStream = stream;
+      video.srcObject = stream;
+      video.style.display = 'block';
+    })
+    .catch(function(err){
+      var msg = 'Camera access denied.';
+      if (err.name === 'NotFoundError') msg = 'No camera found on this device.';
+      else if (err.name === 'NotAllowedError') msg = 'Camera permission was denied. Please allow access in browser settings.';
+      showCameraError(errDiv, errMsg, msg);
+    });
+}
+
+function showCameraError(errDiv, errMsg, msg) {
+  if (errDiv) { errDiv.style.display = 'flex'; }
+  if (errMsg) { errMsg.textContent = msg; }
+}
+
+function capturePhoto() {
+  var video = document.getElementById('cameraVideo');
+  var canvas = document.getElementById('cameraCanvas');
+  if (!video || !canvas || video.style.display === 'none') return;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  video.style.display = 'none';
+  canvas.style.display = 'block';
+  document.getElementById('captureBtn').style.display = 'none';
+  document.getElementById('retakeBtn').style.display = 'block';
+  document.getElementById('saveBtn').style.display = 'block';
+}
+
+function retakePhoto() {
+  var video = document.getElementById('cameraVideo');
+  var canvas = document.getElementById('cameraCanvas');
+  if (!video || !canvas) return;
+  canvas.style.display = 'none';
+  video.style.display = 'block';
+  document.getElementById('captureBtn').style.display = 'flex';
+  document.getElementById('retakeBtn').style.display = 'none';
+  document.getElementById('saveBtn').style.display = 'none';
+}
+
+function savePhoto() {
+  var canvas = document.getElementById('cameraCanvas');
+  if (!canvas) return;
+  var a = document.createElement('a');
+  a.href = canvas.toDataURL('image/jpeg');
+  a.download = 'photo-' + Date.now() + '.jpg';
+  a.click();
+}
+
+/* ════════════════════════════════════
+   6. GALLERY
+════════════════════════════════════ */
+function getGalleryContent() {
+  var imgs = '';
+  for (var i = 1; i <= 18; i++) {
+    imgs += '<img class="gallery-thumb" src="https://picsum.photos/seed/' + i + '/200/200" loading="lazy" onclick="galleryOpen(' + i + ')" alt="Photo ' + i + '">';
+  }
+  return '<div style="display:flex;flex-direction:column;height:100%;position:relative;">' +
+    '<div class="gallery-grid">' + imgs + '</div>' +
+    '<div class="gallery-lightbox" id="galleryLightbox">' +
+      '<button class="gallery-lb-close" onclick="galleryClose()">✕</button>' +
+      '<img id="galleryLbImg" src="" alt="Full size">' +
+    '</div>' +
+  '</div>';
+}
+
+function galleryOpen(n) {
+  var lb = document.getElementById('galleryLightbox');
+  var img = document.getElementById('galleryLbImg');
+  if (!lb || !img) return;
+  img.src = 'https://picsum.photos/seed/' + n + '/400/400';
+  lb.classList.add('open');
+}
+
+function galleryClose() {
+  var lb = document.getElementById('galleryLightbox');
+  if (lb) lb.classList.remove('open');
+}
+
+/* ════════════════════════════════════
+   7. MUSIC PLAYER
+════════════════════════════════════ */
+function getMusicContent() {
+  var t = _musicTracks[_music.track];
+  var playlist = _musicTracks.map(function(tr, i){
+    return '<div class="music-track-item' + (i === _music.track ? ' active-track' : '') + '" onclick="musicSelectTrack(' + i + ')">' +
+      '<div class="music-track-num">' + (i+1) + '</div>' +
+      '<div class="music-track-info">' +
+        '<div class="music-track-name">' + tr.title + '</div>' +
+        '<div class="music-track-artist">' + tr.artist + '</div>' +
+      '</div>' +
+      '<div class="music-track-dur">' + tr.dur + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="music-wrap">' +
+    '<div class="music-albumart" id="musicArt" style="background:linear-gradient(135deg,' + t.color + ',#111);">' + t.emoji + '</div>' +
+    '<div class="music-title" id="musicTitle">' + t.title + '</div>' +
+    '<div class="music-artist" id="musicArtist">' + t.artist + '</div>' +
+    '<div class="music-progress-wrap"><div class="music-progress-track"><div class="music-progress-fill" id="musicFill"></div></div></div>' +
+    '<div class="music-times"><span id="musicCurTime">0:00</span><span id="musicDur">' + t.dur + '</span></div>' +
+    '<div class="music-controls">' +
+      '<button class="music-btn" onclick="musicPrev()">⏮</button>' +
+      '<button class="music-btn music-play-btn" id="musicPlayBtn" onclick="musicToggle()">▶</button>' +
+      '<button class="music-btn" onclick="musicNext()">⏭</button>' +
+    '</div>' +
+    '<div class="music-playlist">' + playlist + '</div>' +
+  '</div>';
+}
+
+function initMusicUI() {
+  updateMusicUI();
+}
+
+function musicToggle() {
+  _music.playing = !_music.playing;
+  if (_music.playing) {
+    _music.interval = setInterval(function(){
+      var track = _musicTracks[_music.track];
+      _music.progress += 200 / (track.secs * 1000);
+      if (_music.progress >= 1) { _music.progress = 0; musicNext(); return; }
+      updateMusicProgress();
+    }, 200);
+  } else {
+    if (_music.interval) { clearInterval(_music.interval); _music.interval = null; }
+  }
+  var btn = document.getElementById('musicPlayBtn');
+  if (btn) btn.textContent = _music.playing ? '⏸' : '▶';
+}
+
+function musicPrev() {
+  _music.track = (_music.track - 1 + _musicTracks.length) % _musicTracks.length;
+  _music.progress = 0;
+  refreshMusicTrack();
+}
+
+function musicNext() {
+  _music.track = (_music.track + 1) % _musicTracks.length;
+  _music.progress = 0;
+  refreshMusicTrack();
+}
+
+function musicSelectTrack(i) {
+  _music.track = i;
+  _music.progress = 0;
+  refreshMusicTrack();
+  if (!_music.playing) musicToggle();
+}
+
+function refreshMusicTrack() {
+  var t = _musicTracks[_music.track];
+  var art = document.getElementById('musicArt');
+  var title = document.getElementById('musicTitle');
+  var artist = document.getElementById('musicArtist');
+  var dur = document.getElementById('musicDur');
+  if (art) { art.textContent = t.emoji; art.style.background = 'linear-gradient(135deg,' + t.color + ',#111)'; }
+  if (title) title.textContent = t.title;
+  if (artist) artist.textContent = t.artist;
+  if (dur) dur.textContent = t.dur;
+  // Update playlist active
+  var items = document.querySelectorAll('.music-track-item');
+  items.forEach(function(el,i){ el.classList.toggle('active-track', i===_music.track); });
+  updateMusicProgress();
+}
+
+function updateMusicProgress() {
+  var fill = document.getElementById('musicFill');
+  var curTime = document.getElementById('musicCurTime');
+  if (!fill) return;
+  var pct = Math.min(1, _music.progress) * 100;
+  fill.style.width = pct + '%';
+  if (curTime) {
+    var secs = Math.floor(_musicTracks[_music.track].secs * _music.progress);
+    var m = Math.floor(secs/60), s = secs % 60;
+    curTime.textContent = m + ':' + s.toString().padStart(2,'0');
+  }
+}
+
+function updateMusicUI() {
+  refreshMusicTrack();
+}
+
+/* ════════════════════════════════════
+   8. SETTINGS
+════════════════════════════════════ */
+function getSettingsContent() {
+  function toggle(id, checked, onchange) {
+    return '<label class="settings-toggle"><input type="checkbox" id="' + id + '"' + (checked?' checked':'') + ' onchange="' + onchange + '"><span class="toggle-slider"></span></label>';
+  }
+  return '<div class="settings-wrap">' +
+    '<div class="settings-section">' +
+      '<div class="settings-section-title">Network</div>' +
+      '<div class="settings-card">' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">📶</span>' +
+          '<div class="settings-row-label">Wi-Fi</div>' +
+          toggle('wifiToggle', true, 'settingsWifiToggle()') +
+        '</div>' +
+        '<div class="wifi-networks visible" id="wifiNetworks">' +
+          '<div class="wifi-net-item">HomeNetwork_5G <span class="wifi-net-signal">✔ Connected</span></div>' +
+          '<div class="wifi-net-item">Neighbor_WiFi <span class="wifi-net-signal">📶 Strong</span></div>' +
+          '<div class="wifi-net-item">CoffeeShop_Free <span class="wifi-net-signal">📶 Medium</span></div>' +
+        '</div>' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">🔵</span>' +
+          '<div class="settings-row-label">Bluetooth</div>' +
+          toggle('btToggle', true, '') +
+        '</div>' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">✈️</span>' +
+          '<div class="settings-row-label">Airplane Mode</div>' +
+          toggle('airToggle', false, '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="settings-section">' +
+      '<div class="settings-section-title">Display</div>' +
+      '<div class="settings-card">' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">🌙</span>' +
+          '<div class="settings-row-label">Dark Mode</div>' +
+          toggle('darkToggle', false, '') +
+        '</div>' +
+        '<div class="settings-slider-row">' +
+          '<div class="settings-slider-label"><span>☀️ Brightness</span><span id="brightnessVal">70%</span></div>' +
+          '<input type="range" class="brightness-slider" min="0" max="100" value="70" oninput="document.getElementById(\'brightnessVal\').textContent=this.value+\'%\'">' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="settings-section">' +
+      '<div class="settings-section-title">System</div>' +
+      '<div class="settings-card">' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">🔔</span>' +
+          '<div class="settings-row-label">Notifications</div>' +
+          toggle('notifToggle', true, '') +
+        '</div>' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">📍</span>' +
+          '<div class="settings-row-label">Location</div>' +
+          toggle('locToggle', true, '') +
+        '</div>' +
+        '<div class="settings-row">' +
+          '<span class="settings-row-icon">🔋</span>' +
+          '<div class="settings-row-label" style="flex:1;"><div>Battery Saver</div><div style="font-size:12px;color:#999;">Battery at 70%</div></div>' +
+          toggle('batteryToggle', false, '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function settingsWifiToggle() {
+  var cb = document.getElementById('wifiToggle');
+  var nets = document.getElementById('wifiNetworks');
+  if (nets) nets.classList.toggle('visible', cb && cb.checked);
+}
+
+/* ════════════════════════════════════
+   9. YOUTUBE
+════════════════════════════════════ */
+var _ytVideos = [
+  {id:'dQw4w9WgXcQ', title:'Never Gonna Give You Up', channel:'Rick Astley', views:'1.4B views'},
+  {id:'9bZkp7q19f0', title:'Gangnam Style',           channel:'PSY',          views:'5.0B views'},
+  {id:'JGwWNGJdvx8', title:'Shape of You',            channel:'Ed Sheeran',   views:'6.1B views'},
+  {id:'XqZsoesa55w', title:'Baby Shark Dance',         channel:'Pinkfong',     views:'13B views'}
+];
+
+function getYouTubeContent() {
+  var list = _ytVideos.map(function(v){
+    var thumb = 'https://img.youtube.com/vi/' + v.id + '/mqdefault.jpg';
+    return '<div class="yt-video-item" onclick="ytPlay(\'' + v.id + '\',\'' + escHtml(v.title) + '\',\'' + escHtml(v.channel) + '\')">' +
+      '<div class="yt-thumb-wrap">' +
+        '<img class="yt-thumb" src="' + thumb + '" onerror="this.parentNode.style.background=\'#e0e0e0\'" alt="">' +
+        '<div class="yt-thumb-play">▶</div>' +
+      '</div>' +
+      '<div class="yt-video-meta">' +
+        '<div class="yt-video-title">' + escHtml(v.title) + '</div>' +
+        '<div class="yt-video-channel">' + escHtml(v.channel) + '</div>' +
+        '<div class="yt-video-views">' + v.views + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="yt-wrap">' +
+    '<div class="yt-search-bar">' +
+      '<input class="yt-search-input" id="ytSearchInput" placeholder="Search YouTube…" onkeydown="if(event.key===\'Enter\')ytSearch()">' +
+      '<button class="yt-search-btn" onclick="ytSearch()">🔍</button>' +
+    '</div>' +
+    '<div class="yt-list" id="ytList">' + list + '</div>' +
+    '<div class="yt-player-wrap" id="ytPlayer">' +
+      '<button class="yt-player-back" onclick="ytBack()">← Back to results</button>' +
+      '<iframe class="yt-player-iframe" id="ytIframe" src="" allowfullscreen allow="autoplay"></iframe>' +
+      '<div class="yt-player-info">' +
+        '<div class="yt-player-title" id="ytPlayerTitle"></div>' +
+        '<div class="yt-player-channel" id="ytPlayerChannel"></div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function ytPlay(id, title, channel) {
+  var list = document.getElementById('ytList');
+  var player = document.getElementById('ytPlayer');
+  var iframe = document.getElementById('ytIframe');
+  var titleEl = document.getElementById('ytPlayerTitle');
+  var chanEl = document.getElementById('ytPlayerChannel');
+  if (!list || !player || !iframe) return;
+  list.style.display = 'none';
+  document.querySelector('.yt-search-bar').style.display = 'none';
+  player.classList.add('active');
+  iframe.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+  if (titleEl) titleEl.textContent = title;
+  if (chanEl) chanEl.textContent = channel;
+}
+
+function ytBack() {
+  var list = document.getElementById('ytList');
+  var player = document.getElementById('ytPlayer');
+  var iframe = document.getElementById('ytIframe');
+  var searchBar = document.querySelector('.yt-search-bar');
+  if (!list || !player) return;
+  iframe.src = '';
+  player.classList.remove('active');
+  list.style.display = 'block';
+  if (searchBar) searchBar.style.display = 'flex';
+}
+
+function ytSearch() {
+  var input = document.getElementById('ytSearchInput');
+  if (!input || !input.value.trim()) return;
+  showNotif('Search: ' + input.value.trim() + ' (demo — showing preset results)');
+}
+
+/* ════════════════════════════════════
+   10. MAIL
+════════════════════════════════════ */
+var _mailEmails = [
+  {from:'GitHub',      subject:'[Action required] Review PR #342',   preview:'Your pull request needs attention…',                   time:'9:41',  color:'#24292e', unread:true,
+   body:'Hello,\n\nYour pull request #342 "Add dark mode support" has been reviewed.\n\n3 comments require your attention before merging.\n\nView PR → github.com/your-repo/pull/342\n\n— The GitHub Team'},
+  {from:'Mom',         subject:'Sunday dinner 🍝',                    preview:'Don\'t forget we\'re having pasta this…',              time:'8:30',  color:'#e91e63', unread:true,
+   body:'Hi honey!\n\nJust a reminder that we\'re having pasta this Sunday at 6pm. Your aunt and uncle will be there too.\n\nBring that garlic bread I like please 🥖\n\nLove you! 💕\n\n— Mom'},
+  {from:'Netflix',     subject:'New on Netflix this week',            preview:'Top picks for you: Stranger Things S5…',              time:'7:15',  color:'#e50914', unread:false,
+   body:'Hi there,\n\nHere\'s what\'s new on Netflix this week just for you:\n\n🎬 Stranger Things Season 5 (Final)\n🎬 The Witcher: Blood Origin\n🎬 Wednesday Season 2\n\nStart watching → netflix.com\n\n— The Netflix Team'},
+  {from:'Bank Alert',  subject:'Transaction: $42.00 at Starbucks',    preview:'A purchase was made on your account…',                 time:'6:50',  color:'#1565c0', unread:false,
+   body:'Transaction Alert\n\nAmount: $42.00\nMerchant: Starbucks #3421\nDate: Today at 6:49 AM\nCard: •••• 4821\n\nIf you did not make this transaction, please contact us immediately at 1-800-555-0100.\n\n— Your Bank'},
+  {from:'LinkedIn',    subject:'You appeared in 12 searches this week', preview:'See who viewed your profile and more…',             time:'Yesterday', color:'#0077b5', unread:false,
+   body:'Hi there,\n\nYour LinkedIn profile appeared in 12 searches this week! Here\'s your weekly summary:\n\n👀 12 profile views\n🔗 3 new connection requests\n💼 5 new job matches\n\nView your dashboard → linkedin.com\n\n— LinkedIn'}
+];
+
+function getMailContent() {
+  var list = _mailEmails.map(function(e,i){
+    var letter = e.from.charAt(0).toUpperCase();
+    return '<div class="mail-item' + (e.unread?' unread':'') + '" onclick="mailOpenItem(' + i + ')">' +
+      '<div class="mail-avatar" style="background:' + e.color + ';">' + letter + '</div>' +
+      '<div class="mail-item-meta">' +
+        '<div class="mail-sender">' + escHtml(e.from) + '</div>' +
+        '<div class="mail-subject">' + escHtml(e.subject) + '</div>' +
+        '<div class="mail-preview">' + escHtml(e.preview) + '</div>' +
+      '</div>' +
+      '<div class="mail-time">' + e.time + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div style="display:flex;flex-direction:column;height:100%;position:relative;">' +
+    '<div class="mail-inbox" id="mailInbox">' +
+      '<div class="mail-toolbar">' +
+        '<div class="mail-toolbar-title">Inbox</div>' +
+        '<button class="mail-compose-btn" onclick="mailCompose()">✏</button>' +
+      '</div>' +
+      '<div class="mail-list">' + list + '</div>' +
+    '</div>' +
+    '<div class="mail-detail" id="mailDetail" style="position:absolute;inset:0;background:#fff;">' +
+      '<button class="mail-detail-back" onclick="mailBack()">← Inbox</button>' +
+      '<div class="mail-detail-header">' +
+        '<div class="mail-detail-subject" id="mailDetailSubject"></div>' +
+        '<div class="mail-detail-meta" id="mailDetailMeta"></div>' +
+      '</div>' +
+      '<div class="mail-detail-body" id="mailDetailBody"></div>' +
+    '</div>' +
+    '<div class="mail-compose-view" id="mailComposeView" style="position:absolute;inset:0;background:#fff;">' +
+      '<div class="mail-compose-header">' +
+        '<button class="mail-compose-back" onclick="mailComposeClose()">✕</button>' +
+        '<div class="mail-compose-title">New Message</div>' +
+      '</div>' +
+      '<div class="mail-compose-form">' +
+        '<div class="mail-compose-field"><span class="mail-compose-label">To</span><input class="mail-compose-input" id="mailTo" placeholder="recipient@example.com"></div>' +
+        '<div class="mail-compose-field"><span class="mail-compose-label">Subject</span><input class="mail-compose-input" id="mailSubject" placeholder="Subject"></div>' +
+        '<textarea class="mail-compose-body" id="mailBody" placeholder="Write your message…"></textarea>' +
+      '</div>' +
+      '<button class="mail-send-btn" onclick="mailSend()">Send →</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function mailOpenItem(i) {
+  var e = _mailEmails[i];
+  var detail = document.getElementById('mailDetail');
+  var subj = document.getElementById('mailDetailSubject');
+  var meta = document.getElementById('mailDetailMeta');
+  var body = document.getElementById('mailDetailBody');
+  if (!detail) return;
+  if (subj) subj.textContent = e.subject;
+  if (meta) meta.textContent = 'From: ' + e.from + '  ·  ' + e.time;
+  if (body) body.textContent = e.body;
+  _mailEmails[i].unread = false;
+  detail.classList.add('active');
+}
+
+function mailBack() {
+  var detail = document.getElementById('mailDetail');
+  if (detail) detail.classList.remove('active');
+}
+
+function mailCompose() {
+  var cv = document.getElementById('mailComposeView');
+  if (cv) cv.classList.add('active');
+}
+
+function mailComposeClose() {
+  var cv = document.getElementById('mailComposeView');
+  if (cv) cv.classList.remove('active');
+}
+
+function mailSend() {
+  var to = document.getElementById('mailTo');
+  var subj = document.getElementById('mailSubject');
+  if (!to || !to.value.trim()) { showNotif('Enter a recipient email'); return; }
+  showNotif('Email sent to ' + to.value.trim() + '!');
+  mailComposeClose();
+}
+
+/* ════════════════════════════════════
+   11. CALCULATOR
+════════════════════════════════════ */
+function getCalcContent() {
+  return '<div class="calc-wrap">' +
+    '<div class="calc-display">' +
+      '<div class="calc-expr" id="calcExpr"></div>' +
+      '<div class="calc-val" id="calcVal">0</div>' +
+    '</div>' +
+    '<div class="calc-grid">' +
+      '<button class="calc-btn calc-fn" onclick="calcInput(\'fn\',\'C\')">C</button>' +
+      '<button class="calc-btn calc-fn" onclick="calcInput(\'fn\',\'±\')">±</button>' +
+      '<button class="calc-btn calc-fn" onclick="calcInput(\'fn\',\'%\')">%</button>' +
+      '<button class="calc-btn calc-op" onclick="calcInput(\'op\',\'/\')">÷</button>' +
+
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'7\')">7</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'8\')">8</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'9\')">9</button>' +
+      '<button class="calc-btn calc-op" onclick="calcInput(\'op\',\'*\')">×</button>' +
+
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'4\')">4</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'5\')">5</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'6\')">6</button>' +
+      '<button class="calc-btn calc-op" onclick="calcInput(\'op\',\'-\')">−</button>' +
+
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'1\')">1</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'2\')">2</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'3\')">3</button>' +
+      '<button class="calc-btn calc-op" onclick="calcInput(\'op\',\'+\')">+</button>' +
+
+      '<button class="calc-btn calc-zero" onclick="calcInput(\'d\',\'0\')">0</button>' +
+      '<button class="calc-btn" onclick="calcInput(\'d\',\'.\')">.</button>' +
+      '<button class="calc-btn calc-op" onclick="calcInput(\'eq\',\'\')">＝</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function calcInput(type, val) {
+  var c = _calc;
+  if (type === 'd') {
+    if (c.hasResult || c.waitNext) {
+      c.display = (val === '.') ? '0.' : val;
+      c.hasResult = false; c.waitNext = false;
+    } else {
+      if (val === '.' && c.display.includes('.')) return;
+      if (c.display === '0' && val !== '.') c.display = val;
+      else if (c.display.length < 12) c.display += val;
+    }
+  } else if (type === 'op') {
+    if (c.op && !c.waitNext) {
+      c.first = calcDoOp(parseFloat(c.first), c.op, parseFloat(c.display));
+      c.display = calcFmt(c.first);
+      c.expr = calcFmt(c.first) + ' ' + calcOpSym(val);
+    } else {
+      c.first = parseFloat(c.display);
+      c.expr = calcFmt(c.first) + ' ' + calcOpSym(val);
+    }
+    c.op = val; c.waitNext = true; c.hasResult = false;
+  } else if (type === 'eq') {
+    if (c.op !== null && !c.waitNext) {
+      var result = calcDoOp(parseFloat(c.first), c.op, parseFloat(c.display));
+      c.expr = calcFmt(c.first) + ' ' + calcOpSym(c.op) + ' ' + c.display + ' =';
+      c.display = calcFmt(result);
+      c.first = result; c.op = null; c.hasResult = true; c.waitNext = false;
+    }
+  } else if (type === 'fn') {
+    if (val === 'C') { c.display='0'; c.expr=''; c.first=null; c.op=null; c.waitNext=false; c.hasResult=false; }
+    else if (val === '±') { c.display = calcFmt(-parseFloat(c.display)); }
+    else if (val === '%') { c.display = calcFmt(parseFloat(c.display)/100); }
+  }
+  var dEl = document.getElementById('calcVal');
+  var eEl = document.getElementById('calcExpr');
+  if (dEl) dEl.textContent = c.display;
+  if (eEl) eEl.textContent = c.expr;
+}
+
+function calcDoOp(a, op, b) {
+  if (op === '+') return a + b;
+  if (op === '-') return a - b;
+  if (op === '*') return a * b;
+  if (op === '/') return b !== 0 ? a / b : 0;
+  return b;
+}
+
+function calcFmt(n) {
+  if (!isFinite(n)) return 'Error';
+  var s = parseFloat(n.toPrecision(10)).toString();
+  return s;
+}
+
+function calcOpSym(op) {
+  return {'+':'+', '-':'−', '*':'×', '/':'÷'}[op] || op;
+}
+
+/* ════════════════════════════════════
+   12. CLOCK (Clock / Stopwatch / Timer)
+════════════════════════════════════ */
+function getClockContent() {
+  // Timer keypad
+  var timerKeys = [
+    '1','2','3','4','5','6','7','8','9','','0','⌫'
+  ].map(function(k){
+    if (k === '') return '<div></div>';
+    if (k === '⌫') return '<button class="timer-key timer-key-del" onclick="timerKey(\'del\')">⌫</button>';
+    return '<button class="timer-key" onclick="timerKey(\'' + k + '\')">' + k + '</button>';
+  }).join('');
+
+  return '<div class="clock-app-wrap">' +
+    '<div class="clock-tabs">' +
+      '<button class="clock-tab-btn active" id="tab-clock" onclick="clockTab(\'clock\')">Clock</button>' +
+      '<button class="clock-tab-btn" id="tab-stopwatch" onclick="clockTab(\'stopwatch\')">Stopwatch</button>' +
+      '<button class="clock-tab-btn" id="tab-timer" onclick="clockTab(\'timer\')">Timer</button>' +
+    '</div>' +
+
+    // Clock tab
+    '<div class="clock-tab-panel active" id="panel-clock" style="justify-content:center;">' +
+      '<svg id="clockFaceSvg" viewBox="0 0 200 200" width="170" height="170" style="margin:20px 0 12px;">' +
+        '<circle cx="100" cy="100" r="98" fill="#2d2d42" stroke="#7c4dff" stroke-width="3"/>' +
+        '<line id="clockHourHand" x1="100" y1="100" x2="100" y2="60" stroke="#fff" stroke-width="7" stroke-linecap="round"/>' +
+        '<line id="clockMinHand"  x1="100" y1="100" x2="100" y2="35" stroke="#fff" stroke-width="5" stroke-linecap="round"/>' +
+        '<line id="clockSecHand"  x1="100" y1="110" x2="100" y2="25" stroke="#ff4444" stroke-width="2" stroke-linecap="round"/>' +
+        '<circle cx="100" cy="100" r="5" fill="#7c4dff"/>' +
+      '</svg>' +
+      '<div id="clockDigital" style="font-size:38px;font-weight:200;letter-spacing:2px;">00:00</div>' +
+      '<div id="clockDigitalAmpm" style="font-size:16px;color:rgba(255,255,255,.5);margin-top:4px;"></div>' +
+    '</div>' +
+
+    // Stopwatch tab
+    '<div class="clock-tab-panel" id="panel-stopwatch">' +
+      '<div class="sw-display"><span id="swDisplay">00:00</span><span class="sw-cs">.<span id="swCs">00</span></span></div>' +
+      '<div class="sw-buttons">' +
+        '<button class="sw-btn sw-btn-lap" id="swLapBtn" onclick="swLap()" disabled>Lap</button>' +
+        '<button class="sw-btn sw-btn-start" id="swStartBtn" onclick="swToggle()">Start</button>' +
+        '<button class="sw-btn sw-btn-reset" id="swResetBtn" onclick="swReset()">Reset</button>' +
+      '</div>' +
+      '<div class="sw-laps" id="swLaps"></div>' +
+    '</div>' +
+
+    // Timer tab
+    '<div class="clock-tab-panel timer-panel" id="panel-timer">' +
+      '<div class="timer-ring-wrap">' +
+        '<svg viewBox="0 0 200 200" width="140" height="140">' +
+          '<circle cx="100" cy="100" r="85" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="10"/>' +
+          '<circle id="timerRing" cx="100" cy="100" r="85" fill="none" stroke="#7c4dff" stroke-width="10"' +
+            ' stroke-dasharray="534" stroke-dashoffset="0" stroke-linecap="round"' +
+            ' transform="rotate(-90,100,100)"/>' +
+        '</svg>' +
+      '</div>' +
+      '<div class="timer-digit-display" id="timerDisplay">00:00</div>' +
+      '<div class="timer-keypad">' + timerKeys + '</div>' +
+      '<div class="timer-buttons">' +
+        '<button class="timer-btn timer-btn-reset" onclick="timerReset()">Reset</button>' +
+        '<button class="timer-btn timer-btn-start" id="timerStartBtn" onclick="timerToggle()">Start</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function initClockApp() {
+  // Draw hour markers
+  var svg = document.getElementById('clockFaceSvg');
+  if (svg) {
+    for (var i = 0; i < 12; i++) {
+      var rad = i * Math.PI / 6;
+      var isMajor = (i % 3 === 0);
+      var innerR = isMajor ? 80 : 87;
+      var x1 = 100 + innerR * Math.sin(rad);
+      var y1 = 100 - innerR * Math.cos(rad);
+      var x2 = 100 + 94 * Math.sin(rad);
+      var y2 = 100 - 94 * Math.cos(rad);
+      var line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', x1.toFixed(1)); line.setAttribute('y1', y1.toFixed(1));
+      line.setAttribute('x2', x2.toFixed(1)); line.setAttribute('y2', y2.toFixed(1));
+      line.setAttribute('stroke', isMajor ? '#7c4dff' : 'rgba(255,255,255,.3)');
+      line.setAttribute('stroke-width', isMajor ? '3' : '1');
+      line.setAttribute('stroke-linecap', 'round');
+      svg.insertBefore(line, svg.firstChild.nextSibling);
+    }
+  }
+  updateClockFace();
+  _clockFaceInterval = setInterval(updateClockFace, 1000);
+  // Reset timer digits
+  _timer.digits = '';
+  updateTimerDisplay();
+}
+
+function updateClockFace() {
+  var now = new Date();
+  var s = now.getSeconds(), m = now.getMinutes(), h = now.getHours();
+  var secDeg  = s * 6;
+  var minDeg  = m * 6 + s * 0.1;
+  var hourDeg = (h % 12) * 30 + m * 0.5;
+  var sh = document.getElementById('clockSecHand');
+  var mh = document.getElementById('clockMinHand');
+  var hh = document.getElementById('clockHourHand');
+  if (sh) sh.setAttribute('transform','rotate('+secDeg+',100,100)');
+  if (mh) mh.setAttribute('transform','rotate('+minDeg+',100,100)');
+  if (hh) hh.setAttribute('transform','rotate('+hourDeg+',100,100)');
+  var isPm = h >= 12;
+  var h12 = h % 12 || 12;
+  var dEl = document.getElementById('clockDigital');
+  var aEl = document.getElementById('clockDigitalAmpm');
+  if (dEl) dEl.textContent = h12.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
+  if (aEl) aEl.textContent = isPm ? 'PM' : 'AM';
+}
+
+function clockTab(tab) {
+  ['clock','stopwatch','timer'].forEach(function(t){
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+    document.getElementById('panel-'+t).classList.toggle('active', t===tab);
+  });
+}
+
+/* ── Stopwatch ── */
+function swToggle() {
+  var btn = document.getElementById('swStartBtn');
+  var lapBtn = document.getElementById('swLapBtn');
+  _swRunning = !_swRunning;
+  if (_swRunning) {
+    _swLastStart = Date.now() - _swElapsed;
+    _swInterval = setInterval(swTick, 50);
+    if (btn) { btn.textContent='Stop'; btn.className='sw-btn sw-btn-stop'; }
+    if (lapBtn) lapBtn.disabled = false;
+  } else {
+    clearInterval(_swInterval); _swInterval = null;
+    _swElapsed = Date.now() - _swLastStart;
+    if (btn) { btn.textContent='Start'; btn.className='sw-btn sw-btn-start'; }
+  }
+}
+
+function swTick() {
+  _swElapsed = Date.now() - _swLastStart;
+  var total = Math.floor(_swElapsed / 10); // centiseconds
+  var cs = total % 100;
+  var totalSecs = Math.floor(total / 100);
+  var s = totalSecs % 60;
+  var m = Math.floor(totalSecs / 60);
+  var dEl = document.getElementById('swDisplay');
+  var csEl = document.getElementById('swCs');
+  if (dEl) dEl.textContent = m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
+  if (csEl) csEl.textContent = cs.toString().padStart(2,'0');
+}
+
+function swLap() {
+  if (!_swRunning) return;
+  var total = Math.floor(_swElapsed / 10);
+  var cs = total % 100;
+  var totalSecs = Math.floor(total / 100);
+  var s = totalSecs % 60;
+  var m = Math.floor(totalSecs / 60);
+  var timeStr = m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0') + '.' + cs.toString().padStart(2,'0');
+  _swLaps.push(timeStr);
+  var container = document.getElementById('swLaps');
+  if (!container) return;
+  var div = document.createElement('div');
+  div.className = 'sw-lap-item';
+  div.innerHTML = '<span class="sw-lap-label">Lap ' + _swLaps.length + '</span><span>' + timeStr + '</span>';
+  container.insertBefore(div, container.firstChild);
+}
+
+function swReset() {
+  if (_swRunning) return;
+  _swElapsed = 0; _swLaps = [];
+  var dEl = document.getElementById('swDisplay');
+  var csEl = document.getElementById('swCs');
+  var container = document.getElementById('swLaps');
+  var lapBtn = document.getElementById('swLapBtn');
+  if (dEl) dEl.textContent = '00:00';
+  if (csEl) csEl.textContent = '00';
+  if (container) container.innerHTML = '';
+  if (lapBtn) lapBtn.disabled = true;
+}
+
+/* ── Timer ── */
+function timerKey(k) {
+  if (_timer.running) return;
+  if (k === 'del') {
+    _timer.digits = _timer.digits.slice(0,-1);
+  } else {
+    if (_timer.digits.length < 4) _timer.digits += k;
+  }
+  updateTimerDisplay();
+}
+
+function updateTimerDisplay() {
+  var padded = _timer.digits.padStart(4,'0');
+  var mm = padded.slice(0,2), ss = padded.slice(2,4);
+  var el = document.getElementById('timerDisplay');
+  if (el) el.textContent = mm + ':' + ss;
+  updateTimerRing(1);
+}
+
+function timerToggle() {
+  var btn = document.getElementById('timerStartBtn');
+  if (!_timer.running) {
+    if (!_timer.remaining) {
+      var padded = _timer.digits.padStart(4,'0');
+      _timer.total = parseInt(padded.slice(0,2))*60 + parseInt(padded.slice(2,4));
+      _timer.remaining = _timer.total;
+    }
+    if (_timer.remaining <= 0) return;
+    _timer.running = true;
+    if (btn) { btn.textContent='Pause'; btn.className='timer-btn timer-btn-pause'; }
+    _timer.interval = setInterval(function(){
+      _timer.remaining--;
+      var m = Math.floor(_timer.remaining/60), s = _timer.remaining%60;
+      var el = document.getElementById('timerDisplay');
+      if (el) el.textContent = m.toString().padStart(2,'0') + ':' + s.toString().padStart(2,'0');
+      updateTimerRing(_timer.remaining / _timer.total);
+      if (_timer.remaining <= 0) {
+        clearInterval(_timer.interval); _timer.interval = null;
+        _timer.running = false;
+        if (btn) { btn.textContent='Start'; btn.className='timer-btn timer-btn-start'; }
+        showNotif('⏰ Timer finished!');
+      }
+    }, 1000);
+  } else {
+    _timer.running = false;
+    clearInterval(_timer.interval); _timer.interval = null;
+    if (btn) { btn.textContent='Resume'; btn.className='timer-btn timer-btn-start'; }
+  }
+}
+
+function timerReset() {
+  clearInterval(_timer.interval); _timer.interval = null;
+  _timer.running = false; _timer.remaining = 0; _timer.total = 0; _timer.digits = '';
+  var el = document.getElementById('timerDisplay');
+  if (el) el.textContent = '00:00';
+  var btn = document.getElementById('timerStartBtn');
+  if (btn) { btn.textContent='Start'; btn.className='timer-btn timer-btn-start'; }
+  updateTimerRing(1);
+}
+
+function updateTimerRing(fraction) {
+  var ring = document.getElementById('timerRing');
+  if (!ring) return;
+  var circ = 534; // 2 * pi * 85
+  ring.setAttribute('stroke-dashoffset', (circ * (1 - Math.max(0, Math.min(1, fraction)))).toFixed(1));
+}
+</script>
+</body>
+</html>

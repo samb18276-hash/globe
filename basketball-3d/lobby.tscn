@@ -1,0 +1,142 @@
+[gd_scene format=3 uid="uid://lobby001"]
+
+[sub_resource type="GDScript" id="LobbyScript"]
+script/source = "extends Control
+
+@onready var username_input = $VBox/UsernameInput
+@onready var code_input = $VBox/JoinBox/CodeInput
+@onready var join_box = $VBox/JoinBox
+@onready var status_label = $VBox/StatusLabel
+
+func _ready():
+	username_input.text = NetworkManager.local_username
+	join_box.visible = false
+	$VBox/HostButton.pressed.connect(_on_host_pressed)
+	$VBox/JoinButton.pressed.connect(_on_join_toggle)
+	$VBox/JoinBox/ConnectButton.pressed.connect(_on_connect_pressed)
+	$VBox/QuitButton.pressed.connect(func(): get_tree().quit())
+	NetworkManager.connection_failed.connect(_on_connection_failed)
+
+func _on_host_pressed():
+	var name = username_input.text.strip_edges()
+	if name == '':
+		status_label.text = 'Enter a username first!'
+		return
+	NetworkManager.save_username(name)
+	if NetworkManager.host_game():
+		get_tree().change_scene_to_file('res://game_lobby.tscn')
+	else:
+		status_label.text = 'Failed to host. Try again.'
+
+func _on_join_toggle():
+	join_box.visible = !join_box.visible
+	if join_box.visible:
+		code_input.grab_focus()
+
+func _on_connect_pressed():
+	var name = username_input.text.strip_edges()
+	if name == '':
+		status_label.text = 'Enter a username first!'
+		return
+	var code = code_input.text.strip_edges()
+	if code.length() != 8:
+		status_label.text = 'Code must be 8 digits!'
+		return
+	NetworkManager.save_username(name)
+	status_label.text = 'Searching for game...'
+	NetworkManager.search_by_code(code)
+	NetworkManager.code_found.connect(_on_code_found, CONNECT_ONE_SHOT)
+
+func _on_code_found(_host_ip):
+	await get_tree().create_timer(1.0).timeout
+	get_tree().change_scene_to_file('res://game_lobby.tscn')
+
+func _on_connection_failed():
+	status_label.text = 'Game not found. Check the code!'
+"
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource("LobbyScript")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.05, 0.15, 1)
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -230.0
+offset_right = 230.0
+offset_bottom = 230.0
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="Title" type="Label" parent="VBox"]
+layout_mode = 2
+text = "BASKETBALL 3D"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 48
+
+[node name="UsernameInput" type="LineEdit" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(460, 55)
+placeholder_text = "Enter your username..."
+theme_override_font_sizes/font_size = 22
+alignment = 1
+max_length = 16
+
+[node name="HostButton" type="Button" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(460, 65)
+text = "HOST GAME"
+theme_override_font_sizes/font_size = 28
+
+[node name="JoinButton" type="Button" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(460, 65)
+text = "JOIN GAME"
+theme_override_font_sizes/font_size = 28
+
+[node name="JoinBox" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(460, 60)
+
+[node name="CodeInput" type="LineEdit" parent="VBox/JoinBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(310, 60)
+placeholder_text = "Enter 8-digit code..."
+theme_override_font_sizes/font_size = 26
+alignment = 1
+max_length = 8
+
+[node name="ConnectButton" type="Button" parent="VBox/JoinBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(140, 60)
+text = "JOIN"
+theme_override_font_sizes/font_size = 22
+
+[node name="StatusLabel" type="Label" parent="VBox"]
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.5, 0.4, 1)
+
+[node name="QuitButton" type="Button" parent="VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(460, 45)
+text = "QUIT"
+theme_override_font_sizes/font_size = 20
