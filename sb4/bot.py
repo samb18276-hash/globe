@@ -1,11 +1,13 @@
 import os
 import io
+import re
 import time
 import asyncio
 import tempfile
 import discord
+import requests
 from discord.ext import commands, tasks
-from anthropic import Anthropic
+from groq import Groq
 from dotenv import load_dotenv
 
 # Voice is only available when running locally (too heavy for cloud)
@@ -17,9 +19,9 @@ if VOICE_ENABLED:
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-client_ai = Anthropic(api_key=ANTHROPIC_API_KEY)
+client_ai = Groq(api_key=GROQ_API_KEY)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -30,16 +32,58 @@ conversation_histories = {}
 MAX_HISTORY = 20
 SILENCE_THRESHOLD = 1.5  # seconds of silence before processing
 
-SYSTEM_PROMPT = """You are sb4, a sharp and helpful assistant focused on helping the user make money. You specialize in:
+def fetch_github_content(url):
+    # File URL: github.com/user/repo/blob/branch/path
+    file_match = re.match(r'https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)', url)
+    if file_match:
+        user, repo, branch, path = file_match.groups()
+        raw_url = f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
+        try:
+            resp = requests.get(raw_url, timeout=10)
+            if resp.status_code == 200:
+                return f"Contents of `{path}` from GitHub:\n```\n{resp.text[:6000]}\n```"
+        except Exception:
+            pass
+
+    # Repo URL: github.com/user/repo
+    repo_match = re.match(r'https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$', url)
+    if repo_match:
+        user, repo = repo_match.groups()
+        try:
+            resp = requests.get(f"https://api.github.com/repos/{user}/{repo}/git/trees/HEAD?recursive=1", timeout=10)
+            if resp.status_code == 200:
+                files = [i['path'] for i in resp.json().get('tree', []) if i['type'] == 'blob']
+                return f"Files in `{user}/{repo}` on GitHub:\n" + "\n".join(f"- {f}" for f in files[:60])
+        except Exception:
+            pass
+
+    return None
+
+
+SYSTEM_PROMPT = """You are sb4, a sharp and helpful assistant focused on helping the user make money and build cool things. You specialize in:
 - Side hustles and passive income ideas
 - Investing (stocks, crypto, real estate, index funds)
 - Starting and growing online businesses
 - Freelancing and monetizing skills
 - Budgeting, saving, and building wealth
 - Spotting trends and opportunities early
-- Helping young investers make the right choices
+- Helping young investors make the right choices
+- Coding in any programming language (Python, JavaScript, HTML/CSS, Java, C++, C#, Rust, Go, TypeScript, Bash, SQL, and more)
+- Debugging code, explaining how code works, and writing code from scratch
+- Helping with Discord bots, websites, games, automation scripts, and any other software projects
 
-You speak casually and directly — no fluff, no filler. You can also chat about anything else the user brings up. Keep responses concise unless the user asks for detail. You're like a smart friend who's good with money and business."""
+You speak casually and directly — no fluff, no filler. Keep responses concise unless the user asks for detail. You're like a smart friend who's good with money, business, and coding.
+
+When coding, follow these rules:
+- Write clean, simple code — no over-engineering, no unnecessary complexity
+- Only add what's actually needed for the task, nothing extra
+- Use code blocks with the language specified (e.g. ```python)
+- After the code, give a short plain-English explanation of what it does and how to use it
+- If something could go wrong or needs setup (like installing a library), mention it briefly
+- Don't add excessive comments — only comment where the logic isn't obvious
+- Prefer editing existing code over rewriting everything from scratch
+- If the user shows you broken code, find the actual bug and fix it — don't rewrite the whole thing
+- Lead with the solution, not a long explanation of what you're about to do"""
 
 # Voice state per guild (local only)
 guild_state = {}
@@ -98,13 +142,12 @@ if VOICE_ENABLED:
         conversation_histories[user_id].append({"role": "user", "content": text})
         if len(conversation_histories[user_id]) > MAX_HISTORY:
             conversation_histories[user_id] = conversation_histories[user_id][-MAX_HISTORY:]
-        response = client_ai.messages.create(
-            model="claude-sonnet-4-6",
+        response = client_ai.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=conversation_histories[user_id]
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + conversation_histories[user_id]
         )
-        reply = response.content[0].text
+        reply = response.choices[0].message.content
         conversation_histories[user_id].append({"role": "assistant", "content": reply})
         tts_path = await synthesize(reply)
         def after(error):
@@ -190,6 +233,16 @@ async def on_message(message):
         await message.reply("What's up? Ask me anything — money, business, investing, or whatever.")
         return
 
+    # Fetch any GitHub URLs found in the message
+    github_urls = re.findall(r'https://github\.com/\S+', content)
+    github_context = []
+    for url in github_urls:
+        fetched = fetch_github_content(url)
+        if fetched:
+            github_context.append(fetched)
+    if github_context:
+        content = content + "\n\n" + "\n\n".join(github_context)
+
     user_id = message.author.id
 
     if user_id not in conversation_histories:
@@ -201,13 +254,12 @@ async def on_message(message):
 
     async with message.channel.typing():
         try:
-            response = client_ai.messages.create(
-                model="claude-sonnet-4-6",
+            response = client_ai.chat.completions.create(
+                model="llama-3.3-70b-versatile",
                 max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=conversation_histories[user_id]
+                messages=[{"role": "system", "content": SYSTEM_PROMPT}] + conversation_histories[user_id]
             )
-            reply = response.content[0].text
+            reply = response.choices[0].message.content
             conversation_histories[user_id].append({"role": "assistant", "content": reply})
 
             if len(reply) > 2000:
