@@ -1,20 +1,70 @@
 import os
 import io
 import re
+import sys
 import time
+import json
+import logging
 import asyncio
 import tempfile
 import discord
 import requests
+
+# Fix voice WebSocket SSL issues on Windows (ProactorEventLoop breaks it)
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from discord.ext import commands, tasks
 from groq import Groq
 from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('discord.voice_client').setLevel(logging.DEBUG)
+logging.getLogger('discord.gateway').setLevel(logging.DEBUG)
+
+# Patch voice WebSocket: use v8 + max_dave_protocol_version (Discord's 2024 requirement)
+import threading as _threading
+import discord.gateway as _dgw
+
+@classmethod
+async def _patched_voice_from_client(cls, client, *, resume=False, hook=None):
+    gateway = f"wss://{client.endpoint}/?v=8"
+    http = client._state.http
+    socket = await http.ws_connect(gateway)
+    ws = cls(socket, loop=client.loop, hook=hook)
+    ws.gateway = gateway
+    ws._connection = client
+    ws._max_heartbeat_timeout = 60.0
+    ws.thread_id = _threading.get_ident()
+    if resume:
+        await ws.resume()
+    else:
+        await ws.identify()
+    return ws
+
+async def _patched_identify(self):
+    state = self._connection
+    payload = {
+        "op": self.IDENTIFY,
+        "d": {
+            "server_id": str(state.server_id),
+            "user_id": str(state.user.id),
+            "session_id": state.session_id,
+            "token": state.token,
+            "max_dave_protocol_version": 0,
+        },
+    }
+    await self.send_as_json(payload)
+
+_dgw.DiscordVoiceWebSocket.from_client = _patched_voice_from_client
+_dgw.DiscordVoiceWebSocket.identify = _patched_identify
 
 # Voice is only available when running locally (too heavy for cloud)
 VOICE_ENABLED = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "my_voice.wav"))
 
 if VOICE_ENABLED:
     import speech_recognition as sr
+    if not discord.opus.is_loaded():
+        discord.opus._load_default()
 
 load_dotenv()
 
@@ -25,11 +75,30 @@ client_ai = Groq(api_key=GROQ_API_KEY)
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-conversation_histories = {}
-MAX_HISTORY = 20
+MEMORY_FILE = os.path.join(os.getenv("MEMORY_DIR", os.path.dirname(os.path.abspath(__file__))), "memory.json")
+MAX_HISTORY = 40
+
+def load_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                return {int(k): v for k, v in json.load(f).items()}
+        except Exception:
+            pass
+    return {}
+
+def save_memory(histories):
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(histories, f)
+    except Exception:
+        pass
+
+conversation_histories = load_memory()
 SILENCE_THRESHOLD = 1.5  # seconds of silence before processing
 
 def fetch_github_content(url):
@@ -71,6 +140,7 @@ SYSTEM_PROMPT = """You are sb4, a sharp and helpful assistant focused on helping
 - Coding in any programming language (Python, JavaScript, HTML/CSS, Java, C++, C#, Rust, Go, TypeScript, Bash, SQL, and more)
 - Debugging code, explaining how code works, and writing code from scratch
 - Helping with Discord bots, websites, games, automation scripts, and any other software projects
+- Also can chat about other stuff to and solve other problems
 
 You speak casually and directly — no fluff, no filler. Keep responses concise unless the user asks for detail. You're like a smart friend who's good with money, business, and coding.
 
@@ -103,20 +173,22 @@ if VOICE_ENABLED:
             super().__init__()
             self.last_spoke = {}
 
-        def write(self, data):
-            if data.user:
-                self.last_spoke[data.user.id] = time.monotonic()
-            super().write(data)
+        def write(self, data, user):
+            print(f"[audio] from {user}")
+            self.last_spoke[user] = time.monotonic()
+            super().write(data, user)
 
     async def transcribe(wav_bytes: bytes) -> str:
-        recognizer = sr.Recognizer()
-        audio_file = io.BytesIO(wav_bytes)
-        with sr.AudioFile(audio_file) as source:
-            audio = recognizer.record(source)
-        try:
-            return recognizer.recognize_google(audio)
-        except (sr.UnknownValueError, sr.RequestError):
-            return ""
+        def _do_transcribe():
+            recognizer = sr.Recognizer()
+            audio_file = io.BytesIO(wav_bytes)
+            with sr.AudioFile(audio_file) as source:
+                audio = recognizer.record(source)
+            try:
+                return recognizer.recognize_google(audio)
+            except (sr.UnknownValueError, sr.RequestError):
+                return ""
+        return await asyncio.get_event_loop().run_in_executor(None, _do_transcribe)
 
     async def synthesize(text: str) -> str:
         ref_wav = os.path.join(os.path.dirname(os.path.abspath(__file__)), "my_voice.wav")
@@ -131,6 +203,8 @@ if VOICE_ENABLED:
         return out_path
 
     async def handle_voice_turn(guild_id: int, user_id: int, wav_bytes: bytes):
+        if guild_id not in guild_state:
+            return
         state = guild_state[guild_id]
         text = await transcribe(wav_bytes)
         if not text:
@@ -142,13 +216,16 @@ if VOICE_ENABLED:
         conversation_histories[user_id].append({"role": "user", "content": text})
         if len(conversation_histories[user_id]) > MAX_HISTORY:
             conversation_histories[user_id] = conversation_histories[user_id][-MAX_HISTORY:]
-        response = client_ai.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        loop = asyncio.get_event_loop()
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + conversation_histories[user_id]
+        response = await loop.run_in_executor(None, lambda: client_ai.chat.completions.create(
+            model="llama-3.1-8b-instant",
             max_tokens=1024,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + conversation_histories[user_id]
-        )
+            messages=messages
+        ))
         reply = response.choices[0].message.content
         conversation_histories[user_id].append({"role": "assistant", "content": reply})
+        save_memory(conversation_histories)
         tts_path = await synthesize(reply)
         def after(error):
             try:
@@ -172,12 +249,14 @@ if VOICE_ENABLED:
             if size > best_size:
                 best_size = size
                 best_user = uid
-        if best_user and best_size > 10000:
+        if best_user is not None and best_size > 10000:
             sink.audio_data[best_user].file.seek(0)
             wav_bytes = sink.audio_data[best_user].file.read()
-            asyncio.create_task(handle_voice_turn(guild_id, best_user, wav_bytes))
+            user_id = best_user.id if hasattr(best_user, 'id') else best_user
+            asyncio.create_task(handle_voice_turn(guild_id, user_id, wav_bytes))
         else:
             state["processing"] = False
+            state["recording"] = False
             await start_recording(guild_id)
 
     async def start_recording(guild_id: int):
@@ -185,10 +264,16 @@ if VOICE_ENABLED:
             return
         state = guild_state[guild_id]
         vc = state["vc"]
-        if vc.is_connected() and not vc.is_recording() and not state["processing"]:
+        if vc.is_connected() and not state["recording"] and not state["processing"]:
             sink = TrackingSink()
             state["sink"] = sink
-            vc.start_recording(sink, recording_callback, guild_id)
+            state["recording"] = True
+            try:
+                vc.start_recording(sink, recording_callback, guild_id)
+                print("[voice] start_recording called successfully")
+            except Exception as e:
+                print(f"[voice] start_recording ERROR: {e}")
+                state["recording"] = False
 
     @tasks.loop(seconds=0.5)
     async def silence_detector():
@@ -196,19 +281,21 @@ if VOICE_ENABLED:
         for guild_id, state in list(guild_state.items()):
             if state["processing"] or not state.get("sink") or not state["vc"].is_connected():
                 continue
-            if not state["vc"].is_recording():
+            if not state["recording"]:
                 continue
             spoke = state["sink"].last_spoke
             if not spoke:
                 continue
             if now - max(spoke.values()) >= SILENCE_THRESHOLD:
+                print("[silence] detected, stopping recording")
                 state["processing"] = True
+                state["recording"] = False
                 state["vc"].stop_recording()
 
 
 @bot.event
 async def on_ready():
-    if VOICE_ENABLED:
+    if VOICE_ENABLED and not silence_detector.is_running():
         silence_detector.start()
     print(f"sb4 is online as {bot.user} | Voice: {'on' if VOICE_ENABLED else 'off (cloud mode)'}")
 
@@ -218,26 +305,24 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    is_dm = isinstance(message.channel, discord.DMChannel)
-    is_mentioned = bot.user in message.mentions
-
-    if not is_dm and not is_mentioned:
+    # Handle commands first
+    if message.content.startswith("!"):
         await bot.process_commands(message)
         return
 
     content = message.content
-    if is_mentioned:
+    if bot.user in message.mentions:
         content = content.replace(f"<@{bot.user.id}>", "").strip()
 
     if not content:
-        await message.reply("What's up? Ask me anything — money, business, investing, or whatever.")
+        await message.reply("You didn't send any content. Please try again.")
         return
 
     # Fetch any GitHub URLs found in the message
     github_urls = re.findall(r'https://github\.com/\S+', content)
     github_context = []
     for url in github_urls:
-        fetched = fetch_github_content(url)
+        fetched = await asyncio.get_event_loop().run_in_executor(None, fetch_github_content, url)
         if fetched:
             github_context.append(fetched)
     if github_context:
@@ -254,13 +339,15 @@ async def on_message(message):
 
     async with message.channel.typing():
         try:
-            response = client_ai.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+            msgs = [{"role": "system", "content": SYSTEM_PROMPT}] + conversation_histories[user_id]
+            response = await asyncio.get_event_loop().run_in_executor(None, lambda: client_ai.chat.completions.create(
+                model="llama-3.1-8b-instant",
                 max_tokens=1024,
-                messages=[{"role": "system", "content": SYSTEM_PROMPT}] + conversation_histories[user_id]
-            )
+                messages=msgs
+            ))
             reply = response.choices[0].message.content
             conversation_histories[user_id].append({"role": "assistant", "content": reply})
+            save_memory(conversation_histories)
 
             if len(reply) > 2000:
                 for i in range(0, len(reply), 2000):
@@ -279,13 +366,27 @@ async def join(ctx):
     if not VOICE_ENABLED:
         await ctx.reply("Voice is only available when running locally.")
         return
-    if not ctx.author.voice:
+    member = ctx.guild.get_member(ctx.author.id)
+    if not member or not member.voice:
         await ctx.reply("You're not in a voice channel.")
         return
-    channel = ctx.author.voice.channel
-    vc = await channel.connect()
-    guild_state[ctx.guild.id] = {"vc": vc, "sink": None, "processing": False}
-    await start_recording(ctx.guild.id)
+    channel = member.voice.channel
+    existing = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if existing:
+        await existing.disconnect(force=True)
+    try:
+        vc = await channel.connect(timeout=30.0)
+    except Exception as e:
+        await ctx.reply(f"Couldn't connect to voice: {e}")
+        return
+    sink = TrackingSink()
+    guild_state[ctx.guild.id] = {"vc": vc, "sink": sink, "processing": False, "recording": False}
+    try:
+        vc.start_recording(sink, recording_callback, ctx.guild.id)
+        guild_state[ctx.guild.id]["recording"] = True
+    except Exception as e:
+        await ctx.reply(f"Recording failed: {e}")
+        return
     await ctx.reply(f"Joined {channel.name}. Talk to me!")
 
 
@@ -294,8 +395,10 @@ async def leave(ctx):
     guild_id = ctx.guild.id
     if guild_id in guild_state:
         state = guild_state[guild_id]
-        if state["vc"].is_recording():
+        try:
             state["vc"].stop_recording()
+        except Exception:
+            pass
         await state["vc"].disconnect()
         del guild_state[guild_id]
     await ctx.reply("Left.")
@@ -304,6 +407,7 @@ async def leave(ctx):
 @bot.command(name="reset")
 async def reset(ctx):
     conversation_histories.pop(ctx.author.id, None)
+    save_memory(conversation_histories)
     await ctx.reply("Conversation reset. Fresh start.")
 
 
