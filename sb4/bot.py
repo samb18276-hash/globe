@@ -395,7 +395,8 @@ async def on_message(message):
                 mentioned_claude = str(CLAUDEBOT_ID) in message.content
                 asked_claude = re.search(r'\b(ask|tell|hey|ping)\s+claude', message.content, re.IGNORECASE)
                 if mentioned_claude or asked_claude:
-                    await message.channel.send(f"<@{CLAUDEBOT_ID}> sb4 says: {reply}")
+                    clean_reply = re.sub(r'\[d:\d+\]\s*', '', reply)
+                    await message.channel.send(f"<@{CLAUDEBOT_ID}> [d:0] sb4 says: {clean_reply}")
 
         except Exception as e:
             await message.reply(f"Something went wrong: {e}")
