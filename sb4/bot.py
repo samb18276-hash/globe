@@ -336,7 +336,8 @@ async def on_message(message):
     content = message.content
     if bot.user in message.mentions:
         content = content.replace(f"<@{bot.user.id}>", "").strip()
-    # Strip depth tag from content
+    # Strip claudebot mention and depth tag from content
+    content = content.replace(f"<@{CLAUDEBOT_ID}>", "").strip()
     content = re.sub(r'\[d:\d+\]', '', content).strip()
 
     if not content:
