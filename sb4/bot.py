@@ -315,6 +315,7 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    print(f"[msg] from={message.author} bot={message.author.bot} content={message.content[:80]}")
     if message.author == bot.user:
         return
 
