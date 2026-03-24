@@ -341,8 +341,11 @@ async def on_message(message):
     content = re.sub(r'\[d:\d+\]', '', content).strip()
 
     if not content:
-        await message.reply("You didn't send any content. Please try again.")
-        return
+        if str(CLAUDEBOT_ID) in message.content:
+            content = "say hello to claude and introduce yourself"
+        else:
+            await message.reply("You didn't send any content. Please try again.")
+            return
 
     # Fetch any GitHub URLs found in the message
     github_urls = re.findall(r'https://github\.com/\S+', content)
