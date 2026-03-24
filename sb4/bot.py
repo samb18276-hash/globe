@@ -9,6 +9,7 @@ import asyncio
 import tempfile
 import discord
 import requests
+from pymongo import MongoClient
 
 # Fix voice WebSocket SSL issues on Windows (ProactorEventLoop breaks it)
 if sys.platform == "win32":
@@ -79,24 +80,35 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-MEMORY_FILE = os.path.join(os.getenv("MEMORY_DIR", os.path.dirname(os.path.abspath(__file__))), "memory.json")
 MAX_HISTORY = 40
 
+MONGO_URI = os.getenv("MONGO_URI")
+if MONGO_URI:
+    _mongo = MongoClient(MONGO_URI)
+    _col = _mongo["sb4"]["memory"]
+else:
+    _col = None
+
 def load_memory():
-    if os.path.exists(MEMORY_FILE):
+    if _col is not None:
         try:
-            with open(MEMORY_FILE, "r") as f:
-                return {int(k): v for k, v in json.load(f).items()}
+            doc = _col.find_one({"_id": "histories"})
+            if doc:
+                return {int(k): v for k, v in doc["data"].items()}
         except Exception:
             pass
     return {}
 
 def save_memory(histories):
-    try:
-        with open(MEMORY_FILE, "w") as f:
-            json.dump(histories, f)
-    except Exception:
-        pass
+    if _col is not None:
+        try:
+            _col.update_one(
+                {"_id": "histories"},
+                {"$set": {"data": {str(k): v for k, v in histories.items()}}},
+                upsert=True
+            )
+        except Exception:
+            pass
 
 conversation_histories = load_memory()
 SILENCE_THRESHOLD = 1.5  # seconds of silence before processing
