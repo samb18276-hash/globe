@@ -71,6 +71,7 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+CLAUDEBOT_ID = 1485773868290277618
 
 client_ai = Groq(api_key=GROQ_API_KEY)
 
@@ -384,6 +385,13 @@ async def on_message(message):
                     await message.reply(reply[i:i+2000])
             else:
                 await message.reply(reply)
+
+            # Auto-relay to claudebot if user mentioned it or said "ask claude"
+            if not message.author.bot:
+                mentioned_claude = str(CLAUDEBOT_ID) in message.content
+                asked_claude = re.search(r'\b(ask|tell|hey|ping)\s+claude', message.content, re.IGNORECASE)
+                if mentioned_claude or asked_claude:
+                    await message.channel.send(f"<@{CLAUDEBOT_ID}> sb4 says: {reply}")
 
         except Exception as e:
             await message.reply(f"Something went wrong: {e}")
