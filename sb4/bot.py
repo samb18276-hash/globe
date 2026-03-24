@@ -317,6 +317,16 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # Allow other bots to talk to sb4 only if they mention it, with depth limit
+    if message.author.bot:
+        if bot.user not in message.mentions:
+            return
+        # Check depth tag to prevent infinite loops
+        depth_match = re.search(r'\[d:(\d+)\]', message.content)
+        depth = int(depth_match.group(1)) if depth_match else 0
+        if depth >= 3:
+            return
+
     # Handle commands first
     if message.content.startswith("!"):
         await bot.process_commands(message)
@@ -325,6 +335,8 @@ async def on_message(message):
     content = message.content
     if bot.user in message.mentions:
         content = content.replace(f"<@{bot.user.id}>", "").strip()
+    # Strip depth tag from content
+    content = re.sub(r'\[d:\d+\]', '', content).strip()
 
     if not content:
         await message.reply("You didn't send any content. Please try again.")
@@ -360,6 +372,12 @@ async def on_message(message):
             reply = response.choices[0].message.content
             conversation_histories[user_id].append({"role": "assistant", "content": reply})
             save_memory(conversation_histories)
+
+            # Add depth tag when replying to a bot
+            if message.author.bot:
+                depth_match = re.search(r'\[d:(\d+)\]', message.content)
+                depth = int(depth_match.group(1)) if depth_match else 0
+                reply = f"[d:{depth+1}] {reply}"
 
             if len(reply) > 2000:
                 for i in range(0, len(reply), 2000):
